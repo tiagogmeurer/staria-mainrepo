@@ -4,20 +4,23 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 
+from dotenv import load_dotenv
 import requests
 from telegram import Update
 from telegram.ext import Application, MessageHandler, ContextTypes, filters
+
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 # ========= CONFIG =========
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 
 # API do StarIA (FastAPI)
-STAR_API_BASE = os.getenv("STAR_API_BASE", "http://127.0.0.1:8088").strip()
+STAR_API_BASE = os.getenv("STAR_API_BASE", "http://127.0.0.1:8000").strip()
 STAR_USE_RAG_DEFAULT = os.getenv("STAR_USE_RAG", "true").lower() == "true"
 
 # Raiz do StarIA no drive compartilhado (G:)
 DRIVE_ROOT = Path(os.getenv("DRIVE_SYNC_ROOT", r"G:\Drives compartilhados\STARMKT\StarIA")).resolve()
-
 # Pastas (MVP: curriculos)
 CURRICULOS_DIR = DRIVE_ROOT / "curriculos"
 
