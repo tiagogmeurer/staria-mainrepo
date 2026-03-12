@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>StarIA Test</title>
+</head>
+<body>
+
+<h2>StarIA</h2>
+
+<input id="q" style="width:400px" placeholder="Pergunte algo...">
+<button onclick="ask()">Perguntar</button>
+
+<pre id="r"></pre>
+
+<script>
+async function ask(){
+  const q = document.getElementById("q").value;
+
+  const res = await fetch("http://localhost:8088/ask",{
+    method:"POST",
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      question:q,
+      use_rag:true
+    })
+  });
+
+  const data = await res.json();
+  document.getElementById("r").innerText = JSON.stringify(data,null,2);
+}
+</script>
+
+</body>
+</html>
