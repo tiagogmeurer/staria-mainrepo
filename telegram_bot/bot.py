@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import asyncio
 from pathlib import Path
 from datetime import datetime
 
@@ -81,7 +82,7 @@ def call_star_api(question: str, use_rag: bool = True) -> dict:
     r = requests.post(
         f"{STAR_API_BASE}/ask",
         json={"question": question, "use_rag": use_rag},
-        timeout=180,
+        timeout=30,
     )
     r.raise_for_status()
     return r.json()
@@ -188,11 +189,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def looks_like_curriculos_inventory(t: str) -> bool:
     s = (t or "").strip().lower()
 
-    # precisa mencionar curriculo
     if not re.search(r"\bcurr[ií]cul", s):
         return False
 
-    # intenções comuns
     patterns = [
         r"\bquant(os|as)\b.*\bexist(em|e)?\b",
         r"\bquantidade\b",
@@ -231,57 +230,78 @@ def list_curriculos_files(limit: int = 50) -> list[dict]:
 
 
 
-
 async def handle_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Segurança (opcional)
     chat_id = update.effective_chat.id if update.effective_chat else None
     if ALLOWED and chat_id not in ALLOWED:
-        await update.message.reply_text("Acesso não autorizado para este bot.")
+        try:
+            await update.message.reply_text("Acesso não autorizado para este bot.")
+        except Exception as send_err:
+            print("[BOT] Falha ao enviar mensagem de acesso não autorizado:", repr(send_err))
         return
 
     msg = update.message
-    t = (msg.text or "").strip()
+    t = (msg.text or "").strip() if msg and msg.text else ""
     if not t:
         return
 
+    print("[BOT] Mensagem recebida:", t)
+
     # ✅ 1) INVENTÁRIO DE CURRÍCULOS (não usa LLM)
     if looks_like_curriculos_inventory(t):
-        files = list_curriculos_files(limit=80)
-        total = len(files)
+        try:
+            files = list_curriculos_files(limit=80)
+            total = len(files)
 
-        if total == 0:
-            await msg.reply_text(
-                "📂 Pasta de currículos está vazia.\n"
-                f"Destino: {CURRICULOS_DIR}"
+            if total == 0:
+                await msg.reply_text(
+                    "📂 Pasta de currículos está vazia.\n"
+                    f"Destino: {CURRICULOS_DIR}"
+                )
+                return
+
+            names = [f["name"] for f in files if f.get("name")]
+            preview = names[:25]
+
+            out = (
+                f"📌 Currículos encontrados: {total}\n"
+                f"📂 Pasta: {CURRICULOS_DIR}\n\n"
+                "🗂 Últimos arquivos:\n- " + "\n- ".join(preview)
             )
+            if total > len(preview):
+                out += f"\n... (+{total - len(preview)})"
+
+            await msg.reply_text(out[:3500])
             return
 
-        names = [f["name"] for f in files if f.get("name")]
-        preview = names[:25]
-
-        out = (
-            f"📌 Currículos encontrados: {total}\n"
-            f"📂 Pasta: {CURRICULOS_DIR}\n\n"
-            "🗂 Últimos arquivos:\n- " + "\n- ".join(preview)
-        )
-        if total > len(preview):
-            out += f"\n... (+{total - len(preview)})"
-
-        await msg.reply_text(out[:3500])
-        return
+        except Exception as e:
+            print("[BOT] Erro ao listar currículos:", repr(e))
+            try:
+                await msg.reply_text(f"⚠️ Erro ao listar currículos: {e}")
+            except Exception as send_err:
+                print("[BOT] Falha ao enviar mensagem de erro ao Telegram:", repr(send_err))
+            return
 
     # Se o texto parece um "comando de pasta" mas sem arquivo, orienta.
     if route_folder(t) is not None and not is_probably_question(t):
-        await msg.reply_text(
-            "Entendi a pasta — agora me envie o arquivo (PDF/DOCX/XLSX) junto com essa legenda.\n"
-            "Ex: envie o PDF com: 'Coloque na pasta de currículos'."
-        )
+        try:
+            await msg.reply_text(
+                "Entendi a pasta — agora me envie o arquivo (PDF/DOCX/XLSX) junto com essa legenda.\n"
+                "Ex: envie o PDF com: 'Coloque na pasta de currículos'."
+            )
+        except Exception as send_err:
+            print("[BOT] Falha ao enviar orientação de pasta:", repr(send_err))
         return
 
     # Se é pergunta/pedido, consulta a API (/ask) e responde.
     if is_probably_question(t):
         try:
-            data = call_star_api(t, use_rag=STAR_USE_RAG_DEFAULT)
+            print("[BOT] Chamando StarIA em:", STAR_API_BASE)
+
+            data = await asyncio.to_thread(call_star_api, t, STAR_USE_RAG_DEFAULT)
+
+            print("[BOT] Resposta recebida da API")
+
             answer = (data.get("answer") or "").strip() or "(sem resposta)"
             sources = data.get("sources") or []
             files = data.get("files") or []
@@ -299,25 +319,48 @@ async def handle_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await msg.reply_text(out[:3500])
             return
+
         except Exception as e:
-            await msg.reply_text(f"⚠️ Erro ao consultar StarIA: {e}")
+            print("[BOT] Erro ao consultar StarIA:", repr(e))
+            try:
+                await msg.reply_text(f"⚠️ Erro ao consultar StarIA: {e}")
+            except Exception as send_err:
+                print("[BOT] Falha ao enviar mensagem de erro ao Telegram:", repr(send_err))
             return
 
     # Caso não seja pergunta: padrão de orientação
-    await msg.reply_text(
-        "Me envie o arquivo (PDF/DOCX/XLSX) com uma legenda indicando a pasta.\n"
-        "Ex: 'Coloque na pasta de currículos'.\n\n"
-        "Ou faça uma pergunta (ex: 'Quais currículos existem?')."
-    )
+    try:
+        await msg.reply_text(
+            "Me envie o arquivo (PDF/DOCX/XLSX) com uma legenda indicando a pasta.\n"
+            "Ex: 'Coloque na pasta de currículos'.\n\n"
+            "Ou faça uma pergunta (ex: 'Quais currículos existem?')."
+        )
+    except Exception as send_err:
+        print("[BOT] Falha ao enviar mensagem padrão de orientação:", repr(send_err))
+
+
+
+
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    print("[BOT] Exceção não tratada:", repr(context.error))
 
 def main():
     if not TELEGRAM_BOT_TOKEN:
         raise SystemExit("Defina TELEGRAM_BOT_TOKEN no ambiente (.env)")
 
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .read_timeout(30)
+        .write_timeout(30)
+        .connect_timeout(30)
+        .pool_timeout(30)
+        .build()
+    )
 
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_only))
+    app.add_error_handler(on_error)
 
     print("StarIA Telegram Bot (polling) rodando...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
