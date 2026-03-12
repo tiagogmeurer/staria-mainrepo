@@ -1,3 +1,5 @@
+print("### STARIA APP.PY CARREGADO ###")
+
 import os
 import re
 from pathlib import Path
@@ -28,7 +30,11 @@ Regras:
 """
 
 app = FastAPI(title=APP_NAME)
-
+@app.on_event("startup")
+def startup_check():
+    print("[StarIA] DRIVE_ROOT =", DRIVE_ROOT)
+    print("[StarIA] CURRICULOS_PATH =", str(_curriculos_base()))
+    print("[StarIA] CURRICULOS_EXISTS =", _curriculos_base().exists())
 
 class AskRequest(BaseModel):
     question: str
@@ -254,3 +260,36 @@ def automation_write_report(req: AutomationWriteReport):
         return {"ok": r.ok, "message": r.message, "data": r.data}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+@app.get("/debug/curriculos-path")
+def debug_curriculos_path():
+    base = _curriculos_base()
+
+    print("[StarIA] Listing curriculos from:", str(base))
+    print("[StarIA] Exists:", base.exists())
+
+    files = []
+
+    if base.exists():
+        try:
+            for p in base.rglob("*"):
+                if p.is_file():
+                    files.append(str(p))
+                    if len(files) >= 20:
+                        break
+        except Exception as e:
+            return {
+                "drive_root": str(_safe_base()),
+                "curriculos_path": str(base),
+                "exists": base.exists(),
+                "error": str(e),
+            }
+
+    print("[StarIA] Sample files found:", len(files))
+
+    return {
+        "drive_root": str(_safe_base()),
+        "curriculos_path": str(base),
+        "exists": base.exists(),
+        "sample_files": files,
+    }

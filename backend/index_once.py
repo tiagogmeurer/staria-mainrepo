@@ -1,7 +1,8 @@
 from pathlib import Path
 from rag.indexer import upsert_text
+import os
 
-DRIVE_ROOT = Path(r"G:\Drives compartilhados\STARMKT\_StarIA_Test")
+DRIVE_ROOT = Path(os.getenv("DRIVE_SYNC_ROOT", r"G:\Drives compartilhados\STARMKT\StarIA"))
 TEXT_EXTS = {".txt", ".md", ".csv"}
 MAX_FILES = 20
 
