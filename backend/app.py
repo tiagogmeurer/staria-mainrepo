@@ -1,5 +1,4 @@
 import os
-import json
 import re
 from pathlib import Path
 
@@ -15,7 +14,7 @@ from rag.retriever import retrieve
 APP_NAME = "StarIA"
 MODEL_DEFAULT = os.getenv("STAR_OLLAMA_MODEL", "star-llama")
 
-# Raiz do Drive (padrão: o caminho que você já está usando)
+# Raiz do Drive
 DRIVE_ROOT = os.getenv("DRIVE_SYNC_ROOT", r"G:\Drives compartilhados\STARMKT\StarIA")
 
 SYSTEM_PROMPT = """Você é o StarIA, cérebro corporativo da StarMKT.
@@ -43,24 +42,28 @@ def healthz():
 
 
 def _safe_base() -> Path:
-    # Caminho base do Drive (pode ser G:\... ou outro)
     return Path(DRIVE_ROOT)
+
+
+def _curriculos_base() -> Path:
+    return _safe_base() / "curriculos"
 
 
 def _list_curriculos(limit: int = 300) -> list[dict]:
     """
-    Lista arquivos da pasta curriculos (inventário).
-    Retorna lista de dicts: {name, path, ext, size, mtime}
+    Lista arquivos reais da pasta curriculos.
     """
-    base = _safe_base() / "curriculos"
+    base = _curriculos_base()
     if not base.exists():
         return []
 
     exts = {".pdf", ".docx", ".doc", ".txt", ".rtf"}
     out: list[dict] = []
+
     for p in base.rglob("*"):
         if not p.is_file():
             continue
+
         ext = p.suffix.lower()
         if ext not in exts:
             continue
@@ -77,25 +80,42 @@ def _list_curriculos(limit: int = 300) -> list[dict]:
                 }
             )
         except Exception:
-            out.append({"name": p.name, "path": str(p), "ext": ext})
+            out.append(
+                {
+                    "name": p.name,
+                    "path": str(p),
+                    "ext": ext,
+                }
+            )
 
         if len(out) >= limit:
             break
 
-    # ordena por nome só pra ficar previsível
-    out.sort(key=lambda x: x.get("name", ""))
+    out.sort(key=lambda x: x.get("name", "").lower())
     return out
 
 
-def _is_list_curriculos_intent(q: str) -> bool:
-    """
-    Detecta intenção de inventário/listagem de currículos.
-    """
+def _is_curriculos_scope(q: str) -> bool:
     q = q.strip().lower()
-    # exemplos: "quais currículos existem", "liste currículos", "mostre curriculos"
     return bool(
-        re.search(r"\b(quais|liste|listar|mostre|ver)\b", q)
-        and re.search(r"\bcurr[ií]cul|curriculo|currículos\b", q)
+        re.search(r"\bcurr[ií]cul", q)
+        or "curriculo" in q
+        or "currículos" in q
+        or "curriculos" in q
+    )
+
+
+def _is_list_curriculos_intent(q: str) -> bool:
+    q = q.strip().lower()
+    return _is_curriculos_scope(q) and bool(
+        re.search(r"\b(quais|liste|listar|lista|mostre|mostrar|ver|nomes)\b", q)
+    )
+
+
+def _is_count_curriculos_intent(q: str) -> bool:
+    q = q.strip().lower()
+    return _is_curriculos_scope(q) and bool(
+        re.search(r"\b(quantos|quantas|qtd|quantidade|total|n[uú]mero)\b", q)
     )
 
 
@@ -104,10 +124,21 @@ def ask(req: AskRequest):
     model = req.model or MODEL_DEFAULT
     question = (req.question or "").strip()
 
-    # 1) ROUTER: perguntas de inventário/lista (não é RAG)
+    # 1) INVENTÁRIO: contagem real de currículos
+    if _is_count_curriculos_intent(question):
+        files = _list_curriculos(limit=1000)
+        base_path = str(_curriculos_base())
+
+        return {
+            "answer": f"Existem {len(files)} currículo(s) na pasta de currículos.",
+            "sources": [base_path],
+            "files": files,
+        }
+
+    # 2) INVENTÁRIO: listagem real de currículos
     if _is_list_curriculos_intent(question):
         files = _list_curriculos(limit=300)
-        base_path = str(_safe_base() / "curriculos")
+        base_path = str(_curriculos_base())
 
         if not files:
             return {
@@ -123,12 +154,14 @@ def ask(req: AskRequest):
             "files": files,
         }
 
-    # 2) RAG: perguntas de conteúdo (resumo, comparação, extração etc.)
+    # 3) RAG: perguntas semânticas sobre currículos devem buscar só em curriculos
     context = None
     sources: list[str] = []
 
     if req.use_rag:
-        hits = retrieve(question, k=6)
+        where = {"folder": "curriculos"} if _is_curriculos_scope(question) else None
+        hits = retrieve(question, k=6, where=where)
+
         if hits:
             parts = []
             for h in hits:
@@ -136,9 +169,8 @@ def ask(req: AskRequest):
                 path = meta.get("path", h.get("id"))
                 chunk = meta.get("chunk", "?")
                 sources.append(path)
-                parts.append(f"[SOURCE: {path} | {chunk}]\n{h.get('doc','')}")
+                parts.append(f"[SOURCE: {path} | chunk {chunk}]\n{h.get('doc', '')}")
 
-            # remove duplicados mantendo ordem
             seen = set()
             sources = [s for s in sources if not (s in seen or seen.add(s))]
             context = "\n\n---\n\n".join(parts)
