@@ -17,13 +17,12 @@ APP_NAME = "StarIA"
 MODEL_DEFAULT = os.getenv("STAR_OLLAMA_MODEL", "star-llama")
 
 # Raiz do Drive
-DRIVE_ROOT = os.getenv("DRIVE_SYNC_ROOT", r"G:\Drives compartilhados\STARMKT\StarIA")
+DRIVE_ROOT = os.getenv("DRIVE_SYNC_ROOT", r"G:\Drives compartilhados\STARMKT\_StarIA_Test")
 
 SYSTEM_PROMPT = """Você é o StarIA, cérebro corporativo da StarMKT.
 Regras:
 - Seja objetivo, orientado a ação e seguro.
 - Se não tiver contexto suficiente, peça o mínimo necessário mas não atue na suposição.
-- Quando usar CONTEXT, trate como fonte de verdade e cite o caminho do arquivo quando possível.
 - Nunca invente números/valores de documentos: se não estiver no contexto, diga que não está.
 - Quando houver CONTEXTO fornecido pelo sistema, você DEVE responder usando esse conteúdo.
 - Não recuse pedidos de resumo/extração quando o texto já estiver no CONTEXTO.
@@ -49,6 +48,25 @@ def healthz():
 
 def _safe_base() -> Path:
     return Path(DRIVE_ROOT)
+
+
+def _user_wants_sources(q: str) -> bool:
+    q = (q or "").strip().lower()
+    triggers = [
+        "mostre as fontes",
+        "mostrar fontes",
+        "quais fontes",
+        "fonte",
+        "fontes",
+        "source",
+        "sources",
+        "mostre o caminho dos arquivos",
+        "mostrar o caminho dos arquivos",
+        "caminho dos arquivos",
+        "caminho do arquivo",
+        "caminhos",
+    ]
+    return any(t in q for t in triggers)
 
 
 def _curriculos_base() -> Path:
@@ -135,11 +153,13 @@ def ask(req: AskRequest):
         files = _list_curriculos(limit=1000)
         base_path = str(_curriculos_base())
 
-        return {
+        response = {
             "answer": f"Existem {len(files)} currículo(s) na pasta de currículos.",
-            "sources": [base_path],
             "files": files,
         }
+        if _user_wants_sources(question):
+            response["sources"] = [base_path]
+        return response
 
     # 2) INVENTÁRIO: listagem real de currículos
     if _is_list_curriculos_intent(question):
@@ -147,18 +167,22 @@ def ask(req: AskRequest):
         base_path = str(_curriculos_base())
 
         if not files:
-            return {
+            response = {
                 "answer": "Ainda não há currículos na pasta de currículos.",
-                "sources": [base_path],
                 "files": [],
             }
+            if _user_wants_sources(question):
+                response["sources"] = [base_path]
+            return response
 
         lines = [f"- {f['name']}" for f in files]
-        return {
+        response = {
             "answer": f"Currículos encontrados ({len(files)}):\n" + "\n".join(lines),
-            "sources": [base_path],
             "files": files,
         }
+        if _user_wants_sources(question):
+            response["sources"] = [base_path]
+        return response
 
     # 3) RAG: perguntas semânticas sobre currículos devem buscar só em curriculos
     context = None
@@ -190,7 +214,11 @@ def ask(req: AskRequest):
         num_ctx=4096,
     )
 
-    return {"answer": answer, "sources": sources}
+    response = {"answer": answer}
+    if _user_wants_sources(question):
+        response["sources"] = sources
+
+    return response
 
 
 class ListFilesRequest(BaseModel):
