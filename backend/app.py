@@ -16,8 +16,11 @@ from rag.retriever import retrieve
 APP_NAME = "StarIA"
 MODEL_DEFAULT = os.getenv("STAR_OLLAMA_MODEL", "star-llama")
 
-# Raiz do Drive
-DRIVE_ROOT = os.getenv("DRIVE_SYNC_ROOT", r"G:\Drives compartilhados\STARMKT\_StarIA_Test")
+# Raiz do Drive do StarIA (ambiente de teste isolado)
+STARIA_DRIVE_ROOT_ENV = os.getenv("STARIA_DRIVE_ROOT")
+DRIVE_SYNC_ROOT_ENV = os.getenv("DRIVE_SYNC_ROOT")
+
+DRIVE_ROOT = STARIA_DRIVE_ROOT_ENV or r"G:\Drives compartilhados\STARMKT\_StarIA_Test"
 
 SYSTEM_PROMPT = """Você é o StarIA, cérebro corporativo da StarMKT.
 Regras:
@@ -31,6 +34,8 @@ Regras:
 app = FastAPI(title=APP_NAME)
 @app.on_event("startup")
 def startup_check():
+    print("[StarIA] STARIA_DRIVE_ROOT env =", STARIA_DRIVE_ROOT_ENV)
+    print("[StarIA] DRIVE_SYNC_ROOT env =", DRIVE_SYNC_ROOT_ENV)
     print("[StarIA] DRIVE_ROOT =", DRIVE_ROOT)
     print("[StarIA] CURRICULOS_PATH =", str(_curriculos_base()))
     print("[StarIA] CURRICULOS_EXISTS =", _curriculos_base().exists())
