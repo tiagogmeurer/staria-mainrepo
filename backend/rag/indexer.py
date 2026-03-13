@@ -43,9 +43,32 @@ def index_txt_folder(folder: str, limit: int = 500):
             "chunk": 1,
         }
 
+        alias = ""
+        if p.name.lower() == "ctx_company.txt":
+            alias = "empresa StarMKT contexto institucional companhia organização"
+        elif p.name.lower() == "ctx_clients.txt":
+            alias = "clientes contas carteira de clientes StarMKT"
+        elif p.name.lower() == "ctx_services.txt":
+            alias = "serviços soluções entregas escopo StarMKT"
+        elif p.name.lower() == "ctx_processes.txt":
+            alias = "processos fluxo operação etapas StarMKT"
+        elif p.name.lower() == "ctx_glossary.txt":
+            alias = "glossário termos definições conceitos StarMKT"
+        elif p.name.lower() == "ctx_staria.txt":
+            alias = "StarIA inteligência artificial agente assistente corporativo"
+        elif p.name.lower() == "ctx_operational_rules.txt":
+            alias = "regras operacionais comportamento instruções políticas do agente"
+
+        index_text = f"""Arquivo: {p.name}
+Nome sem extensão: {p.stem}
+Aliases semânticos: {alias}
+Conteúdo:
+{text}
+"""
+
         upsert_text(
             doc_id=str(p),
-            text=text[:20000],
+            text=index_text[:20000],
             metadata=metadata,
         )
 
