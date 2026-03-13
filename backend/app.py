@@ -197,6 +197,21 @@ def ask(req: AskRequest):
         where = {"folder": "curriculos"} if _is_curriculos_scope(question) else None
         hits = retrieve(question, k=6, where=where)
 
+        print("\n[DEBUG] question =", question)
+        print("[DEBUG] hits count =", len(hits) if hits else 0)
+        print("\n[DEBUG] question =", question)
+        print("[DEBUG] hits count =", len(hits) if hits else 0)
+
+        if hits:
+            for i, h in enumerate(hits, 1):
+                meta = h.get("meta") or {}
+                print(f"[DEBUG] hit {i} path =", meta.get("path"))
+                print(f"[DEBUG] hit {i} doc preview =", (h.get("doc") or "")[:300])
+
+        # fallback institucional
+        if not hits:
+           hits = retrieve("StarMKT empresa", k=3)
+
         if hits:
             parts = []
             for h in hits:
@@ -209,6 +224,8 @@ def ask(req: AskRequest):
             seen = set()
             sources = [s for s in sources if not (s in seen or seen.add(s))]
             context = "\n\n---\n\n".join(parts)
+
+            print("[DEBUG] context preview =", (context or "")[:1200])
 
     answer = ollama_chat(
         model=model,

@@ -21,7 +21,10 @@ STAR_API_BASE = os.getenv("STAR_API_BASE", "http://127.0.0.1:8000").strip()
 STAR_USE_RAG_DEFAULT = os.getenv("STAR_USE_RAG", "true").lower() == "true"
 
 # Raiz do StarIA no drive compartilhado (G:)
-DRIVE_ROOT = Path(os.getenv("DRIVE_SYNC_ROOT", r"G:\Drives compartilhados\STARMKT\StarIA")).resolve()
+DRIVE_ROOT = Path(
+    os.getenv("STARIA_DRIVE_ROOT", r"G:\Drives compartilhados\STARMKT\_StarIA_Test")
+).resolve()
+
 # Pastas (MVP: curriculos)
 CURRICULOS_DIR = DRIVE_ROOT / "curriculos"
 
@@ -79,22 +82,31 @@ def is_probably_question(text: str) -> bool:
     return bool(re.match(r"^(quais|qual|me diga|liste|mostre|resuma|procure|busque|tem|existe|verifique)\b", t))
 
 def call_star_api(question: str, use_rag: bool = True) -> dict:
+    payload = {
+        "question": question,
+        "use_rag": use_rag,
+    }
+
+    print("[BOT] DEBUG PAYLOAD:", payload)
+
     r = requests.post(
         f"{STAR_API_BASE}/ask",
-        json={"question": question, "use_rag": use_rag},
+        json=payload,
         timeout=30,
     )
+
     r.raise_for_status()
     return r.json()
 
-
-def looks_like_curriculos_inventory(text: str) -> bool:
-    t = (text or "").strip().lower()
-    return bool(re.search(r"\b(quantos|quais)\b.*\bcurr[ií]cul", t))
-
 def call_files_list(rel_path: str, exts=None, limit: int = 200) -> dict:
     payload = {"rel_path": rel_path, "exts": exts, "limit": limit}
-    r = requests.post(f"{STAR_API_BASE}/files/list", json=payload, timeout=30)
+
+    r = requests.post(
+        f"{STAR_API_BASE}/files/list",
+        json=payload,
+        timeout=30
+    )
+
     r.raise_for_status()
     return r.json()
 
@@ -298,7 +310,7 @@ async def handle_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             print("[BOT] Chamando StarIA em:", STAR_API_BASE)
 
-            data = await asyncio.to_thread(call_star_api, t, STAR_USE_RAG_DEFAULT)
+            data = await asyncio.to_thread(call_star_api, t, True)
 
             print("[BOT] Resposta recebida da API")
 

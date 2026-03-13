@@ -14,22 +14,20 @@ def ollama_chat(
 ) -> str:
     url = f"{OLLAMA_BASE}/api/chat"
 
-    # 1) Só UM system
-    messages = [{"role": "system", "content": system}]
-
-    # 2) Contexto vai como USER (não como system)
     if context:
-        messages.append({
-            "role": "user",
-            "content": (
-                "Use o CONTEXTO abaixo como fonte de verdade (não invente nada fora dele).\n\n"
-                f"### CONTEXTO\n{context}\n\n"
-                "### TAREFA\nResponda o pedido a seguir usando apenas o contexto quando aplicável."
-            )
-        })
+        user_content = (
+            "Use o CONTEXTO abaixo como fonte de verdade. "
+            "Não invente nada fora dele.\n\n"
+            f"### CONTEXTO\n{context}\n\n"
+            f"### PERGUNTA\n{user}"
+        )
+    else:
+        user_content = user
 
-    # 3) Pergunta do usuário
-    messages.append({"role": "user", "content": user})
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_content},
+    ]
 
     payload: Dict[str, Any] = {
         "model": model,
