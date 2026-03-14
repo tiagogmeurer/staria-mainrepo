@@ -2,16 +2,51 @@ from pathlib import Path
 from rag.indexer import upsert_text
 import os
 
-DRIVE_ROOT = Path(os.getenv("DRIVE_SYNC_ROOT", r"G:\Drives compartilhados\STARMKT\_StarIA_Test"))
-TEXT_EXTS = {".txt", ".md", ".csv"}
+import pandas as pd
+from pathlib import Path
+import docx
+import pdfplumber
+
+DRIVE_ROOT = Path(os.getenv("STARIA_DRIVE_ROOT", r"G:\Drives compartilhados\STARMKT\StarIA"))
+TEXT_EXTS = {
+    ".txt",
+    ".md",
+    ".csv",
+    ".xlsx",
+    ".xls",
+    ".docx",
+    ".pdf"
+}
 MAX_FILES = 20
 
 def safe_read_text(path: Path) -> str:
     try:
-        return path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
+        ext = path.suffix.lower()
+
+        if ext in {".txt", ".md", ".csv"}:
+            return path.read_text(encoding="utf-8", errors="ignore")
+
+        if ext in {".xlsx", ".xls"}:
+            df = pd.read_excel(path)
+            return df.to_string()
+
+        if ext in {".docx"}:
+            doc = docx.Document(path)
+            return "\n".join(p.text for p in doc.paragraphs)
+
+        if ext in {".pdf"}:
+            text = ""
+            with pdfplumber.open(path) as pdf:
+                for page in pdf.pages:
+                    text += page.extract_text() or ""
+            return text
+
         return ""
-    
+
+    except Exception as e:
+        print(f"[ERRO] Falha ao ler {path}: {e}")
+        return ""
+       
 def _semantic_alias_for_file(filename: str) -> str:
     mapping = {
         "ctx_company.txt": "empresa StarMKT contexto institucional companhia organização",

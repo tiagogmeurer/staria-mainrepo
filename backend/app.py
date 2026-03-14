@@ -2,6 +2,7 @@ print("### STARIA APP.PY CARREGADO ###")
 
 import os
 import re
+import random
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -20,7 +21,7 @@ MODEL_DEFAULT = os.getenv("STAR_OLLAMA_MODEL", "star-llama")
 STARIA_DRIVE_ROOT_ENV = os.getenv("STARIA_DRIVE_ROOT")
 DRIVE_SYNC_ROOT_ENV = os.getenv("DRIVE_SYNC_ROOT")
 
-DRIVE_ROOT = STARIA_DRIVE_ROOT_ENV or r"G:\Drives compartilhados\STARMKT\_StarIA_Test"
+DRIVE_ROOT = STARIA_DRIVE_ROOT_ENV or r"G:\Drives compartilhados\STARMKT\StarIA"
 
 SYSTEM_PROMPT = """Você é o StarIA, cérebro corporativo da StarMKT.
 Regras:
@@ -46,10 +47,12 @@ class AskRequest(BaseModel):
     use_rag: bool = True
 
 
-@app.get("/healthz")
-def healthz():
-    return {"ok": True, "app": APP_NAME}
-
+@app.get("/health")
+def health():
+    return {
+        "service": "StarNodeV0",
+        "status": "online"
+    }
 
 def _safe_base() -> Path:
     return Path(DRIVE_ROOT)
@@ -147,11 +150,53 @@ def _is_count_curriculos_intent(q: str) -> bool:
         re.search(r"\b(quantos|quantas|qtd|quantidade|total|n[uú]mero)\b", q)
     )
 
+def _is_greeting(q: str) -> bool:
+    q = (q or "").strip().lower()
+
+    greetings = [
+        "opa",
+        "oi",
+        "olá",
+        "ola",
+        "hey",
+        "eai",
+        "e aí",
+        "e ai",
+        "bom dia",
+        "boa tarde",
+        "boa noite",
+        "como vai",
+        "tudo bem",
+        "fala aí",
+        "fala ai",
+        "salve",
+    ]
+
+    if q in greetings:
+        return True
+
+    return any(q.startswith(g) for g in greetings)
+
+
+def _get_greeting_reply() -> str:
+    options = [
+        "Olá! Sou a StarIA, a inteligência artificial da StarMKT. Como posso ajudar você hoje?",
+        "Opa! Fala aí — sou a StarIA. Como posso te ajudar agora?",
+        "Hey! StarIA na área. Como posso ser útil?",
+        "Oi! Sou a StarIA, assistente da StarMKT. Me diga como posso ajudar.",
+        "Olá! Tudo certo? Sou a StarIA. O que você precisa agora?",
+    ]
+    return random.choice(options)
+
 
 @app.post("/ask")
 def ask(req: AskRequest):
     model = req.model or MODEL_DEFAULT
     question = (req.question or "").strip()
+
+    # 0) Saudação simples
+    if _is_greeting(question):
+        return {"answer": _get_greeting_reply()}
 
     # 1) INVENTÁRIO: contagem real de currículos
     if _is_count_curriculos_intent(question):
@@ -197,8 +242,6 @@ def ask(req: AskRequest):
         where = {"folder": "curriculos"} if _is_curriculos_scope(question) else None
         hits = retrieve(question, k=6, where=where)
 
-        print("\n[DEBUG] question =", question)
-        print("[DEBUG] hits count =", len(hits) if hits else 0)
         print("\n[DEBUG] question =", question)
         print("[DEBUG] hits count =", len(hits) if hits else 0)
 

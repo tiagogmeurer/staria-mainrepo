@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 import requests
 from telegram import Update
 from telegram.ext import Application, MessageHandler, ContextTypes, filters
+from telegram.error import NetworkError
+
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -22,7 +24,7 @@ STAR_USE_RAG_DEFAULT = os.getenv("STAR_USE_RAG", "true").lower() == "true"
 
 # Raiz do StarIA no drive compartilhado (G:)
 DRIVE_ROOT = Path(
-    os.getenv("STARIA_DRIVE_ROOT", r"G:\Drives compartilhados\STARMKT\_StarIA_Test")
+    os.getenv("STARIA_DRIVE_ROOT", r"G:\Drives compartilhados\STARMKT\StarIA")
 ).resolve()
 
 # Pastas (MVP: curriculos)
@@ -354,7 +356,14 @@ async def handle_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    print("[BOT] Exceção não tratada:", repr(context.error))
+    err = context.error
+
+    # erros de rede são comuns no polling
+    if isinstance(err, NetworkError):
+        print("[BOT] NetworkError transitório (reconectando):", err)
+        return
+
+    print("[BOT] Exceção não tratada:", repr(err))
 
 def main():
     if not TELEGRAM_BOT_TOKEN:
@@ -374,8 +383,11 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_only))
     app.add_error_handler(on_error)
 
-    print("StarIA Telegram Bot (polling) rodando...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    print("[ONLINE] StarIA running in polling mode")
+    app.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+    )
 
 if __name__ == "__main__":
     main()

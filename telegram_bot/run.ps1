@@ -1,5 +1,12 @@
-cd C:\AI\backend
+cd C:\AI\telegram_bot
 
-.\.venv311\Scripts\Activate.ps1
+while ($true) {
 
-python -c "from dotenv import load_dotenv; load_dotenv(r'C:\AI\telegram_bot\.env'); import runpy; runpy.run_path(r'C:\AI\telegram_bot\bot.py', run_name='__main__')"
+    Write-Host "Iniciando StarIA via Telegram Bot..."
+
+    C:\AI\backend\.venv311\Scripts\python.exe bot.py
+
+    Write-Host "Bot caiu. Reiniciando em 5 segundos..."
+
+    Start-Sleep -Seconds 5
+}
