@@ -8,9 +8,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 import requests
 from telegram import Update
-from telegram.ext import Application, MessageHandler, ContextTypes, filters
 from telegram.error import NetworkError
-
+from telegram.ext import Application, MessageHandler, ContextTypes, filters
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -22,19 +21,19 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 STAR_API_BASE = os.getenv("STAR_API_BASE", "http://127.0.0.1:8000").strip()
 STAR_USE_RAG_DEFAULT = os.getenv("STAR_USE_RAG", "true").lower() == "true"
 
-# Raiz do StarIA no drive compartilhado (G:)
+# Raiz oficial do StarIA
 DRIVE_ROOT = Path(
     os.getenv("STARIA_DRIVE_ROOT", r"G:\Drives compartilhados\STARMKT\StarIA")
 ).resolve()
 
-# Pastas (MVP: curriculos)
+# Pastas operacionais
 CURRICULOS_DIR = DRIVE_ROOT / "curriculos"
 
-# Indexador (reaproveita seu script atual)
-INDEXER_SCRIPT = Path(os.getenv("INDEXER_SCRIPT", r"C:\AI\backend\index_inbox.py"))
+# Script de indexação manual/rebuild
+INDEXER_SCRIPT = Path(os.getenv("INDEXER_SCRIPT", r"C:\AI\backend\index_once.py"))
 
-# (Opcional) restringe quem pode usar o bot
-ALLOWED_CHAT_IDS = os.getenv("ALLOWED_CHAT_IDS", "").strip()  # ex: "123,456"
+# Segurança opcional
+ALLOWED_CHAT_IDS = os.getenv("ALLOWED_CHAT_IDS", "").strip()
 ALLOWED = set()
 if ALLOWED_CHAT_IDS:
     for x in ALLOWED_CHAT_IDS.split(","):
@@ -42,46 +41,86 @@ if ALLOWED_CHAT_IDS:
         if x:
             ALLOWED.add(int(x))
 
-# ========= ROUTING (texto → pasta) =========
+
+# ========= HELPERS =========
 def route_folder(user_text: str) -> Path | None:
-    """
-    Decide a pasta com base no texto/caption.
-    MVP: só currículos. Depois expandimos com mais regras.
-    """
     t = (user_text or "").strip().lower()
 
-    if re.search(r"\bcurr[ií]cul", t) or "curriculos" in t:
+    if re.search(r"\bcurr[ií]cul", t) or "curriculos" in t or "currículos" in t:
         return CURRICULOS_DIR
 
     # futuros:
     # if "contratos" in t: return DRIVE_ROOT / "contratos"
-    # if "apresenta" in t: return DRIVE_ROOT / "apresentacoes"
-    # if "rh" in t: return DRIVE_ROOT / "relatorios_rh"
-    # if "finance" in t: return DRIVE_ROOT / "relatorios_financeiros"
+    # if "relatorio" in t: return DRIVE_ROOT / "relatorio"
+    # if "banco de talentos" in t: return DRIVE_ROOT / "banco_talentos"
 
     return None
 
+
 def safe_filename(name: str) -> str:
     name = (name or "").strip().replace("\u0000", "")
-    name = re.sub(r'[<>:"/\\|?*]+', "_", name)  # windows-safe
+    name = re.sub(r'[<>:"/\\|?*]+', "_", name)
     name = re.sub(r"\s+", " ", name).strip()
     return name[:180] if len(name) > 180 else name
+
 
 def now_stamp() -> str:
     return datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
+
 def is_probably_question(text: str) -> bool:
-    """
-    Heurística simples: se tem "?" ou começa com verbos típicos de pedido/pergunta.
-    """
     if not text:
         return False
+
     t = text.strip().lower()
+
     if t.startswith("/"):
         return False
+
     if "?" in t:
         return True
-    return bool(re.match(r"^(quais|qual|me diga|liste|mostre|resuma|procure|busque|tem|existe|verifique)\b", t))
+
+    return bool(
+        re.match(
+            r"^(quais|qual|me diga|liste|listar|mostre|mostrar|resuma|procure|busque|tem|existe|verifique|explique|defina|como|quem|onde|quando|por que|porque|fala|me fale)\b",
+            t,
+        )
+    )
+
+
+def looks_like_greeting(text: str) -> bool:
+    if not text:
+        return False
+
+    t = text.strip().lower()
+
+    greetings = [
+        "opa",
+        "epa",
+        "oi",
+        "olá",
+        "ola",
+        "hey",
+        "eai",
+        "e aí",
+        "e ai",
+        "e ae",
+        "bom dia",
+        "boa tarde",
+        "boa noite",
+        "como vai",
+        "tudo bem",
+        "fala aí",
+        "fala ai",
+        "fala ae",
+        "salve",
+    ]
+
+    if t in greetings:
+        return True
+
+    return any(t.startswith(g) for g in greetings)
+
 
 def call_star_api(question: str, use_rag: bool = True) -> dict:
     payload = {
@@ -96,50 +135,75 @@ def call_star_api(question: str, use_rag: bool = True) -> dict:
         json=payload,
         timeout=30,
     )
-
     r.raise_for_status()
-    return r.json()
+    data = r.json()
+    print("[BOT] JSON da API:", data)
+    return data
+
 
 def call_files_list(rel_path: str, exts=None, limit: int = 200) -> dict:
     payload = {"rel_path": rel_path, "exts": exts, "limit": limit}
-
-    r = requests.post(
-        f"{STAR_API_BASE}/files/list",
-        json=payload,
-        timeout=30
-    )
-
+    r = requests.post(f"{STAR_API_BASE}/files/list", json=payload, timeout=30)
     r.raise_for_status()
     return r.json()
 
-def format_curriculos_inventory(files: list[dict]) -> str:
-    # filtra e ordena por nome
-    items = [f for f in (files or []) if isinstance(f, dict) and f.get("name")]
-    items.sort(key=lambda x: x["name"].lower())
 
-    total = len(items)
-    if total == 0:
-        return "📭 Não encontrei currículos na pasta `curriculos`."
+def looks_like_curriculos_inventory(text: str) -> bool:
+    s = (text or "").strip().lower()
 
-    names = [f["name"] for f in items[:30]]
-    extra = total - len(names)
+    if not re.search(r"\bcurr[ií]cul", s):
+        return False
 
-    out = f"📌 Currículos encontrados: **{total}**\n\n"
-    out += "📎 Arquivos:\n- " + "\n- ".join(names)
-    if extra > 0:
-        out += f"\n- ... (+{extra} arquivos)"
-    return out
+    patterns = [
+        r"\bquant(os|as)\b.*\bexist(em|e)?\b",
+        r"\bquantidade\b",
+        r"\bconta(r)?\b",
+        r"\blistar?\b",
+        r"\bquais\b.*\bexist(em|e)?\b",
+        r"\btem\b.*\bcurr",
+        r"\bver\b.*\bcurr",
+        r"\bn[uú]mero\b.*\bcurr",
+        r"\btotal\b.*\bcurr",
+    ]
+    return any(re.search(p, s) for p in patterns)
+
+
+def list_curriculos_files(limit: int = 50) -> list[dict]:
+    exts = {".pdf", ".docx", ".doc", ".txt", ".rtf"}
+    if not CURRICULOS_DIR.exists():
+        return []
+
+    items = []
+    for p in CURRICULOS_DIR.rglob("*"):
+        if p.is_file() and p.suffix.lower() in exts:
+            try:
+                st = p.stat()
+                items.append(
+                    {
+                        "name": p.name,
+                        "path": str(p),
+                        "size": st.st_size,
+                        "mtime": int(st.st_mtime),
+                    }
+                )
+            except Exception:
+                items.append({"name": p.name, "path": str(p)})
+
+    items.sort(key=lambda x: x.get("mtime", 0), reverse=True)
+    return items[:limit]
 
 
 # ========= HANDLERS =========
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Segurança (opcional)
     chat_id = update.effective_chat.id if update.effective_chat else None
     if ALLOWED and chat_id not in ALLOWED:
         await update.message.reply_text("Acesso não autorizado para este bot.")
         return
 
     msg = update.message
+    if not msg or not msg.document:
+        return
+
     caption_or_text = (msg.caption or msg.text or "").strip()
 
     target_dir = route_folder(caption_or_text)
@@ -160,11 +224,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tmp_path = tmp_dir / f"{now_stamp()}__{file_name}"
     final_path = target_dir / file_name
 
-    # Download
     tg_file = await context.bot.get_file(doc.file_id)
     await tg_file.download_to_drive(custom_path=str(tmp_path))
 
-    # Move atomicamente / versiona se já existir
     if final_path.exists():
         stem = Path(file_name).stem
         suf = Path(file_name).suffix
@@ -180,9 +242,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await msg.reply_text(f"✅ Recebido e salvo em:\n{final_path}")
 
-    # Dispara indexação (MVP)
     try:
-        import subprocess, sys
+        import subprocess
+        import sys
+
         p = subprocess.run(
             [sys.executable, str(INDEXER_SCRIPT)],
             cwd=str(INDEXER_SCRIPT.parent),
@@ -190,6 +253,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text=True,
             timeout=600,
         )
+
         if p.returncode == 0:
             await msg.reply_text("📚 Indexação concluída.")
         else:
@@ -199,59 +263,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(f"⚠️ Não consegui rodar a indexação: {e}")
 
 
-
-def looks_like_curriculos_inventory(t: str) -> bool:
-    s = (t or "").strip().lower()
-
-    if not re.search(r"\bcurr[ií]cul", s):
-        return False
-
-    patterns = [
-        r"\bquant(os|as)\b.*\bexist(em|e)?\b",
-        r"\bquantidade\b",
-        r"\bconta(r)?\b",
-        r"\blistar?\b",
-        r"\bquais\b.*\bexist(em|e)?\b",
-        r"\btem\b.*\bcurr",
-        r"\bver\b.*\bcurr",
-    ]
-    return any(re.search(p, s) for p in patterns)
-
-def list_curriculos_files(limit: int = 50) -> list[dict]:
-    # lista apenas arquivos “de currículo” comuns (ajusta se quiser)
-    exts = {".pdf", ".docx", ".doc", ".txt", ".rtf"}
-    if not CURRICULOS_DIR.exists():
-        return []
-
-    items = []
-    for p in CURRICULOS_DIR.rglob("*"):
-        if p.is_file() and p.suffix.lower() in exts:
-            try:
-                st = p.stat()
-                items.append({
-                    "name": p.name,
-                    "path": str(p),
-                    "size": st.st_size,
-                    "mtime": int(st.st_mtime),
-                })
-            except Exception:
-                items.append({"name": p.name, "path": str(p)})
-
-    # ordena por mais recente (mtime desc)
-    items.sort(key=lambda x: x.get("mtime", 0), reverse=True)
-    return items[:limit]
-
-
-
-
 async def handle_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Segurança (opcional)
     chat_id = update.effective_chat.id if update.effective_chat else None
     if ALLOWED and chat_id not in ALLOWED:
         try:
             await update.message.reply_text("Acesso não autorizado para este bot.")
         except Exception as send_err:
-            print("[BOT] Falha ao enviar mensagem de acesso não autorizado:", repr(send_err))
+            print("[BOT] Falha ao enviar acesso não autorizado:", repr(send_err))
         return
 
     msg = update.message
@@ -261,7 +279,7 @@ async def handle_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     print("[BOT] Mensagem recebida:", t)
 
-    # ✅ 1) INVENTÁRIO DE CURRÍCULOS (não usa LLM)
+    # 1) Inventário factual de currículos
     if looks_like_curriculos_inventory(t):
         try:
             files = list_curriculos_files(limit=80)
@@ -293,10 +311,10 @@ async def handle_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await msg.reply_text(f"⚠️ Erro ao listar currículos: {e}")
             except Exception as send_err:
-                print("[BOT] Falha ao enviar mensagem de erro ao Telegram:", repr(send_err))
+                print("[BOT] Falha ao enviar erro ao Telegram:", repr(send_err))
             return
 
-    # Se o texto parece um "comando de pasta" mas sem arquivo, orienta.
+    # 2) Comando de pasta sem arquivo
     if route_folder(t) is not None and not is_probably_question(t):
         try:
             await msg.reply_text(
@@ -307,12 +325,12 @@ async def handle_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("[BOT] Falha ao enviar orientação de pasta:", repr(send_err))
         return
 
-    # Se é pergunta/pedido, consulta a API (/ask) e responde.
-    if is_probably_question(t):
+    # 3) Perguntas OU saudações vão para o StarIA
+    if is_probably_question(t) or looks_like_greeting(t):
         try:
             print("[BOT] Chamando StarIA em:", STAR_API_BASE)
 
-            data = await asyncio.to_thread(call_star_api, t, True)
+            data = await asyncio.to_thread(call_star_api, t, STAR_USE_RAG_DEFAULT)
 
             print("[BOT] Resposta recebida da API")
 
@@ -322,7 +340,6 @@ async def handle_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             out = answer
 
-            # Se o backend devolver lista de arquivos (como no Swagger), mostra
             if files:
                 names = [f.get("name") for f in files if isinstance(f, dict) and f.get("name")]
                 if names:
@@ -342,7 +359,7 @@ async def handle_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 print("[BOT] Falha ao enviar mensagem de erro ao Telegram:", repr(send_err))
             return
 
-    # Caso não seja pergunta: padrão de orientação
+    # 4) Fallback final
     try:
         await msg.reply_text(
             "Me envie o arquivo (PDF/DOCX/XLSX) com uma legenda indicando a pasta.\n"
@@ -350,20 +367,18 @@ async def handle_text_only(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Ou faça uma pergunta (ex: 'Quais currículos existem?')."
         )
     except Exception as send_err:
-        print("[BOT] Falha ao enviar mensagem padrão de orientação:", repr(send_err))
-
-
+        print("[BOT] Falha ao enviar mensagem padrão:", repr(send_err))
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     err = context.error
 
-    # erros de rede são comuns no polling
     if isinstance(err, NetworkError):
         print("[BOT] NetworkError transitório (reconectando):", err)
         return
 
     print("[BOT] Exceção não tratada:", repr(err))
+
 
 def main():
     if not TELEGRAM_BOT_TOKEN:
@@ -388,6 +403,7 @@ def main():
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True,
     )
+
 
 if __name__ == "__main__":
     main()
