@@ -213,6 +213,11 @@ def _is_greeting(q: str) -> bool:
     return any(q.startswith(g) for g in greetings)
 
 
+
+
+    
+
+
 def _get_greeting_reply() -> str:
     options = [
         "Olá! Sou a StarIA, a inteligência artificial da StarMKT. Como posso ajudar você hoje?",
@@ -421,10 +426,90 @@ def _build_talent_bank_answer(question: str, hits: list[dict], max_candidates: i
     return answer, sources, items
 
 
+
+def _is_identity_question(q: str) -> bool:
+    ql = (q or "").strip().lower()
+    triggers = [
+        "quem é você",
+        "quem é vc",
+        "o que você é",
+        "oq vc é",
+        "qual seu nome",
+        "qual é seu nome",
+        "você é quem",
+        "vc é quem",
+        "quem é a staria",
+        "o que é a staria",
+    ]
+    return any(t in ql for t in triggers)
+
+
+def _is_company_question(q: str) -> bool:
+    ql = (q or "").strip().lower()
+    return (
+        "starmkt" in ql
+        and any(
+            t in ql
+            for t in [
+                "o que é",
+                "quem é",
+                "qual é",
+                "me fale sobre",
+                "fale sobre",
+                "explique",
+                "do que se trata",
+                "qual a missão",
+                "qual é a missão",
+            ]
+        )
+    )
+
+
 @app.post("/ask")
 def ask(req: AskRequest):
     model = req.model or MODEL_DEFAULT
     question = (req.question or "").strip()
+
+    # 0-A) Identidade do assistente (não depende de RAG)
+    if _is_identity_question(question):
+        answer = ollama_chat(
+            model=model,
+            system=SYSTEM_PROMPT,
+            user=(
+                "Responda de forma curta, natural e institucional. "
+                "Explique quem é a StarIA dentro da StarMKT. "
+                "Não diga que não encontrou documentos. "
+                "Fale como assistente corporativa da StarMKT."
+            ),
+            context=None,
+            temperature=0.2,
+            num_ctx=2048,
+        ).strip()
+
+        return {"answer": answer}
+
+    # 0-B) Pergunta institucional sobre a StarMKT
+    if _is_company_question(question):
+        institutional_context = (
+            "A StarMKT é uma empresa focada em campanhas promocionais impactantes "
+            "para o setor de atacarejo, com objetivo de impulsionar crescimento de negócios "
+            "e engajamento do cliente. O lema da empresa é 'Vender mais e melhor.'"
+        )
+
+        answer = ollama_chat(
+            model=model,
+            system=(
+                "Você é o StarIA, cérebro corporativo da StarMKT. "
+                "Responda com base no contexto institucional fornecido. "
+                "Seja breve, claro e natural."
+            ),
+            user=question,
+            context=institutional_context,
+            temperature=0.2,
+            num_ctx=2048,
+        ).strip()
+
+        return {"answer": answer}
 
     # 0) Saudação simples
     if _is_greeting(question):
@@ -550,8 +635,26 @@ def ask(req: AskRequest):
 
             print("[DEBUG] context preview =", (context or "")[:1200])
 
-    # 5) Sem contexto válido => não inventa
+    # 5) Sem contexto válido
     if req.use_rag and not context:
+        non_documental = (
+            not _is_curriculos_scope(question)
+            and not _looks_like_talent_search_intent(question)
+            and not _user_wants_sources(question)
+        )
+
+        if non_documental:
+            answer = ollama_chat(
+                model=model,
+                system=SYSTEM_PROMPT,
+                user=question,
+                context=None,
+                temperature=0.2,
+                num_ctx=2048,
+            ).strip()
+
+            return {"answer": answer}
+
         response = {
             "answer": "Não encontrei essa informação explicitamente nos documentos disponíveis."
         }
@@ -586,7 +689,6 @@ def ask(req: AskRequest):
         response["sources"] = sources
 
     return response
-
 
 class ListFilesRequest(BaseModel):
     rel_path: str = ""

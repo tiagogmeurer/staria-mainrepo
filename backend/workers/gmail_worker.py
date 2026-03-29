@@ -521,7 +521,7 @@ def append_candidate_to_sheet(
 
     candidate_id = get_next_candidate_id(ws, header_map)
 
-    # sempre insere no topo, logo abaixo do cabeçalho
+
     ws.insert_rows(2, amount=1)
     next_row = 2
 
