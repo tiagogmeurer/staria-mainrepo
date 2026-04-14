@@ -25,7 +25,7 @@ load_dotenv(BASE_DIR / ".env", override=True)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 
 # API do StarIA (FastAPI)
-STAR_API_BASE = os.getenv("STAR_API_BASE", "http://127.0.0.1:8000").strip()
+STAR_API_BASE = os.getenv("STAR_API_BASE", "http://127.0.0.1:8088").strip()
 STAR_USE_RAG_DEFAULT = os.getenv("STAR_USE_RAG", "true").lower() == "true"
 STAR_OLLAMA_MODEL = os.getenv("STAR_OLLAMA_MODEL", "star-llama").strip()
 

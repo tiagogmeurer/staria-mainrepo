@@ -3,8 +3,8 @@ print("### STARIA APP.PY CARREGADO ###")
 import os
 import re
 import random
+import unicodedata
 from pathlib import Path
-from collections import defaultdict
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -16,12 +16,11 @@ from tools.automations import create_folder, write_text_report
 from rag.retriever import retrieve
 
 APP_NAME = "StarIA"
-MODEL_DEFAULT = os.getenv("STAR_OLLAMA_MODEL", "star-llama")
+MODEL_DEFAULT = os.getenv("STAR_OLLAMA_MODEL", "star-llama:latest")
 
-# Raiz do Drive do StarIA (ambiente de teste isolado)
+# Raiz do Drive do StarIA
 STARIA_DRIVE_ROOT_ENV = os.getenv("STARIA_DRIVE_ROOT")
 DRIVE_SYNC_ROOT_ENV = os.getenv("DRIVE_SYNC_ROOT")
-
 DRIVE_ROOT = STARIA_DRIVE_ROOT_ENV or r"G:\Drives compartilhados\STARMKT\StarIA"
 
 SYSTEM_PROMPT = """Você é o StarIA, cérebro corporativo da StarMKT.
@@ -96,6 +95,32 @@ def _norm(s: str) -> str:
     return (s or "").strip().lower().replace("\\", "/")
 
 
+def _strip_accents(text: str) -> str:
+    text = text or ""
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", text)
+        if not unicodedata.combining(c)
+    )
+
+
+def _search_norm(text: str) -> str:
+    text = _strip_accents(text or "").lower()
+    text = re.sub(r"[^a-z0-9\s/+-]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _singularize_pt(text: str) -> str:
+    t = _search_norm(text)
+    words = []
+    for w in t.split():
+        if len(w) > 3 and w.endswith("s"):
+            words.append(w[:-1])
+        else:
+            words.append(w)
+    return " ".join(words).strip()
+
+
 def _user_wants_sources(q: str) -> bool:
     q = (q or "").strip().lower()
     triggers = [
@@ -116,9 +141,6 @@ def _user_wants_sources(q: str) -> bool:
 
 
 def _list_curriculos(limit: int = 300) -> list[dict]:
-    """
-    Lista arquivos reais da pasta curriculos.
-    """
     base = _curriculos_base()
     if not base.exists():
         return []
@@ -211,11 +233,6 @@ def _is_greeting(q: str) -> bool:
         return True
 
     return any(q.startswith(g) for g in greetings)
-
-
-
-
-    
 
 
 def _get_greeting_reply() -> str:
@@ -359,7 +376,6 @@ def _looks_like_talent_search_intent(q: str) -> bool:
     if any(t in ql for t in triggers):
         return True
 
-    # Atalho útil para RH mesmo sem citar "currículo"
     if bool(re.search(r"\b(photoshop|excel|crm|varejo|atendimento|social media|tráfego pago|trafego pago|designer|design|marketing|comercial|rh|recrutamento)\b", ql)):
         return True
 
@@ -367,10 +383,6 @@ def _looks_like_talent_search_intent(q: str) -> bool:
 
 
 def _build_talent_bank_answer(question: str, hits: list[dict], max_candidates: int = 5) -> tuple[str, list[str], list[dict]]:
-    """
-    Banco de Talentos determinístico:
-    agrupa hits por currículo e devolve resposta com evidências literais.
-    """
     grouped: dict[str, dict] = {}
 
     for h in hits:
@@ -426,7 +438,6 @@ def _build_talent_bank_answer(question: str, hits: list[dict], max_candidates: i
     return answer, sources, items
 
 
-
 def _is_identity_question(q: str) -> bool:
     ql = (q or "").strip().lower()
     triggers = [
@@ -463,62 +474,111 @@ def _is_company_question(q: str) -> bool:
             ]
         )
     )
-
-
-
-
-
-
-
-def _is_identity_question(q: str) -> bool:
-    ql = (q or "").strip().lower()
-    triggers = [
-        "quem é você",
-        "quem é vc",
-        "o que você é",
-        "oq vc é",
-        "qual seu nome",
-        "qual é seu nome",
-        "você é quem",
-        "vc é quem",
-        "quem é a staria",
-        "o que é a staria",
-    ]
-    return any(t in ql for t in triggers)
-
-
-def _is_company_question(q: str) -> bool:
-    ql = (q or "").strip().lower()
-    return (
-        "starmkt" in ql
-        and any(
-            t in ql
-            for t in [
-                "o que é",
-                "quem é",
-                "qual é",
-                "me fale sobre",
-                "fale sobre",
-                "explique",
-                "do que se trata",
-                "qual a missão",
-                "qual é a missão",
-            ]
-        )
-    )
-
-
 
 
 BANCO_TALENTOS_XLSX = _safe_base() / "banco_talentos" / "banco_talentos.xlsx"
 
 
 def _is_banco_talentos_question(q: str) -> bool:
-    ql = (q or "").strip().lower()
-    return "banco de talentos" in ql or "banco talentos" in ql
+    ql = _search_norm(q)
+
+    triggers = [
+        "banco de talentos",
+        "banco talentos",
+        "banco de dados",
+        "base de candidatos",
+        "base de talento",
+        "candidato do banco",
+        "candidatos do banco",
+        "no banco",
+        "na base",
+    ]
+
+    return any(t in ql for t in triggers)
 
 
-def _load_banco_talentos_rows(limit: int = 50) -> list[dict]:
+
+def _known_job_aliases() -> dict[str, list[str]]:
+    return {
+        "diretor de arte": [
+            "diretor de arte",
+            "diretores de arte",
+            "direcao de arte",
+            "direção de arte",
+            "DA",
+        ],
+        "designer": [
+            "designer",
+            "designers",
+            "design",
+            "design visual",
+        ],
+        "social media": [
+            "social media",
+            "social medias",
+        ],
+        "copywriter": [
+            "copywriter",
+            "copywriters",
+        ],
+        "redator": [
+            "redator",
+            "redatores",
+            "redacao",
+            "redação",
+        ],
+        "motion designer": [
+            "motion designer",
+            "motion designers",
+            "motion",
+        ],
+        "editor de video": [
+            "editor de video",
+            "editor de vídeos",
+            "editor de videos",
+            "video maker",
+            "videomaker",
+        ],
+        "atendimento": [
+            "atendimento",
+            "atendimentos",
+        ],
+        "planejamento": [
+            "planejamento",
+            "planejamentos",
+            "planner",
+        ],
+        "analista": [
+            "analista",
+            "analistas",
+        ],
+        "gerente": [
+            "gerente",
+            "gerentes",
+        ],
+        "trafego pago": [
+            "trafego pago",
+            "tráfego pago",
+            "gestor de trafego",
+            "gestor de tráfego",
+            "midia paga",
+            "mídia paga",
+        ],
+        "ui": [
+            "ui",
+            "ui design",
+            "designer ui",
+        ],
+        "ux": [
+            "ux",
+            "ux design",
+            "designer ux",
+        ],
+    }
+
+
+
+def _load_banco_talentos_rows(limit: int = 1000) -> list[dict]:
     from openpyxl import load_workbook
 
     if not BANCO_TALENTOS_XLSX.exists():
@@ -546,13 +606,92 @@ def _load_banco_talentos_rows(limit: int = 50) -> list[dict]:
     return rows[:limit]
 
 
+def _extract_requested_job_title(question: str) -> str:
+    q = _search_norm(question)
+
+    # 1) tenta achar qualquer alias conhecido em qualquer lugar da frase
+    for canonical, aliases in _known_job_aliases().items():
+        for alias in aliases:
+            if _search_norm(alias) in q:
+                return canonical
+
+    # 2) fallback por regex, caso o usuário escreva algo fora da lista
+    patterns = [
+        r"(?:quais sao os|quais sao as|quem sao os|quem sao as|liste os|liste as|listar os|listar as|mostre os|mostre as)\s+(.+?)\s+(?:do banco de talentos|da base de candidatos|do banco de dados|do banco|na base|no banco)",
+        r"(?:tem|temos|existem|ha)\s+(.+?)\s+(?:no banco de talentos|no banco de dados|no banco|na base de candidatos|na base)",
+        r"(?:quero ver|procure|buscar|busque)\s+(.+?)\s+(?:do banco de talentos|da base de candidatos|do banco de dados|do banco|na base)",
+        r"(.+?)\s+(?:no banco de talentos|no banco de dados|no banco|na base de candidatos|na base)\??$",
+    ]
+
+    for pattern in patterns:
+        m = re.search(pattern, q)
+        if m:
+            cargo = m.group(1).strip(" .,:;!?")
+            cargo = re.sub(
+                r"^(tem|temos|existem|ha|quais sao os|quais sao as|quem sao os|quem sao as|liste os|liste as|listar os|listar as|mostre os|mostre as)\s+",
+                "",
+                cargo,
+            ).strip()
+            if cargo:
+                return cargo
+
+    return ""
+
+
+
+def _cargo_matches(cargo_planilha: str, cargo_busca: str) -> bool:
+    cargo_plan = _search_norm(cargo_planilha)
+    cargo_query = _search_norm(cargo_busca)
+
+    if not cargo_plan or not cargo_query:
+        return False
+
+    # match direto
+    if cargo_query in cargo_plan or cargo_plan in cargo_query:
+        return True
+
+    # match por aliases conhecidos
+    aliases_map = _known_job_aliases()
+
+    query_aliases = set(aliases_map.get(cargo_query, [cargo_query]))
+    query_aliases = {_search_norm(x) for x in query_aliases}
+
+    for alias in query_aliases:
+        if alias and alias in cargo_plan:
+            return True
+
+    # match por tokens
+    cargo_plan_tokens = set(_singularize_pt(cargo_plan).split())
+    cargo_query_tokens = set(_singularize_pt(cargo_query).split())
+
+    if cargo_query_tokens and cargo_query_tokens.issubset(cargo_plan_tokens):
+        return True
+
+    return False
+
+
+def _format_banco_candidate_line(row: dict) -> str:
+    nome = str(row.get("Nome completo") or "").strip() or "Sem nome"
+    cargo = str(row.get("Cargo pretendido") or "").strip()
+    nivel = str(row.get("Nível") or "").strip()
+    localizacao = str(row.get("Localização") or "").strip()
+
+    linha = f"- {nome}"
+    if cargo:
+        linha += f" | Cargo: {cargo}"
+    if nivel:
+        linha += f" | Nível: {nivel}"
+    if localizacao:
+        linha += f" | Local: {localizacao}"
+    return linha
+
 
 @app.post("/ask")
 def ask(req: AskRequest):
     model = req.model or MODEL_DEFAULT
     question = (req.question or "").strip()
 
-    # 0-A) Identidade do assistente (não depende de RAG)
+    # 0-A) Identidade do assistente
     if _is_identity_question(question):
         answer = ollama_chat(
             model=model,
@@ -591,7 +730,7 @@ def ask(req: AskRequest):
         ).strip()
         return {"answer": answer}
 
-    # 0) Saudação simples
+    # 0-C) Saudação simples
     if _is_greeting(question):
         return {"answer": _get_greeting_reply()}
 
@@ -630,40 +769,55 @@ def ask(req: AskRequest):
         if _user_wants_sources(question):
             response["sources"] = [base_path]
         return response
-    
 
-        # 2.5) BANCO DE TALENTOS via planilha
+   # 2.5) BANCO DE TALENTOS via planilha
     if _is_banco_talentos_question(question):
-        rows = _load_banco_talentos_rows(limit=200)
+        rows = _load_banco_talentos_rows(limit=2000)
 
         if not rows:
             return {"answer": "O banco de talentos está vazio no momento."}
 
+        cargo_solicitado = _extract_requested_job_title(question)
+
+        print("\n[DEBUG BANCO] question =", question)
+        print("[DEBUG BANCO] cargo_solicitado =", cargo_solicitado)
+
+        if cargo_solicitado:
+            filtrados = []
+
+            for r in rows:
+                cargo = str(r.get("Cargo pretendido") or "").strip()
+
+                if _cargo_matches(cargo, cargo_solicitado):
+                    filtrados.append(r)
+
+            print("[DEBUG BANCO] total_filtrados =", len(filtrados))
+
+            if not filtrados:
+                return {
+                    "answer": f"Não encontrei candidatos com cargo compatível com '{cargo_solicitado}' no banco de talentos."
+                }
+
+            linhas = [_format_banco_candidate_line(r) for r in filtrados[:30]]
+
+            answer = (
+                f"Encontrei {len(filtrados)} candidato(s) com cargo compatível com '{cargo_solicitado}' no banco de talentos:\n\n"
+                + "\n".join(linhas)
+            )
+
+            return {"answer": answer}
+
         total = len(rows)
-
-        # resumo simples
-        nomes = []
-        for r in rows[:10]:
-            nome = (r.get("Nome completo") or "").strip() if r.get("Nome completo") else ""
-            cargo = (r.get("Cargo pretendido") or "").strip() if r.get("Cargo pretendido") else ""
-            nivel = (r.get("Nível") or "").strip() if r.get("Nível") else ""
-
-            linha = f"- {nome or 'Sem nome'}"
-            if cargo:
-                linha += f" | Cargo: {cargo}"
-            if nivel:
-                linha += f" | Nível: {nivel}"
-
-            nomes.append(linha)
+        nomes = [_format_banco_candidate_line(r) for r in rows[:10]]
 
         answer = (
             f"Nosso banco de talentos possui {total} candidato(s) registrado(s).\n\n"
             f"Primeiros registros:\n" + "\n".join(nomes)
         )
 
-        return {"answer": answer}
+        return {"answer": answer}\
 
-    # 3) BANCO DE TALENTOS: busca por perfil/habilidade/cargo com evidência
+    # 3) BANCO DE TALENTOS: busca por perfil/habilidade/cargo com evidência nos currículos
     if req.use_rag and _looks_like_talent_search_intent(question):
         hits = retrieve(question, k=12, where={"folder": "curriculos"}) or []
         hits = _filter_hits_for_curriculos_scope(hits)
@@ -800,10 +954,6 @@ def ask(req: AskRequest):
         response["sources"] = sources
 
     return response
-   
-
-
-
 
 
 class ListFilesRequest(BaseModel):
