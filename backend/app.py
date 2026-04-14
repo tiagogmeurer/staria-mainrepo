@@ -465,6 +465,88 @@ def _is_company_question(q: str) -> bool:
     )
 
 
+
+
+
+
+
+def _is_identity_question(q: str) -> bool:
+    ql = (q or "").strip().lower()
+    triggers = [
+        "quem é você",
+        "quem é vc",
+        "o que você é",
+        "oq vc é",
+        "qual seu nome",
+        "qual é seu nome",
+        "você é quem",
+        "vc é quem",
+        "quem é a staria",
+        "o que é a staria",
+    ]
+    return any(t in ql for t in triggers)
+
+
+def _is_company_question(q: str) -> bool:
+    ql = (q or "").strip().lower()
+    return (
+        "starmkt" in ql
+        and any(
+            t in ql
+            for t in [
+                "o que é",
+                "quem é",
+                "qual é",
+                "me fale sobre",
+                "fale sobre",
+                "explique",
+                "do que se trata",
+                "qual a missão",
+                "qual é a missão",
+            ]
+        )
+    )
+
+
+
+
+BANCO_TALENTOS_XLSX = _safe_base() / "banco_talentos" / "banco_talentos.xlsx"
+
+
+def _is_banco_talentos_question(q: str) -> bool:
+    ql = (q or "").strip().lower()
+    return "banco de talentos" in ql or "banco talentos" in ql
+
+
+def _load_banco_talentos_rows(limit: int = 50) -> list[dict]:
+    from openpyxl import load_workbook
+
+    if not BANCO_TALENTOS_XLSX.exists():
+        return []
+
+    wb = load_workbook(BANCO_TALENTOS_XLSX, data_only=True)
+    ws = wb.active
+
+    headers = [str(c.value).strip() if c.value is not None else "" for c in ws[1]]
+    rows = []
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        item = {}
+        has_any = False
+
+        for idx, val in enumerate(row):
+            key = headers[idx] if idx < len(headers) else f"col_{idx+1}"
+            item[key] = val
+            if val not in (None, ""):
+                has_any = True
+
+        if has_any:
+            rows.append(item)
+
+    return rows[:limit]
+
+
+
 @app.post("/ask")
 def ask(req: AskRequest):
     model = req.model or MODEL_DEFAULT
@@ -485,7 +567,6 @@ def ask(req: AskRequest):
             temperature=0.2,
             num_ctx=2048,
         ).strip()
-
         return {"answer": answer}
 
     # 0-B) Pergunta institucional sobre a StarMKT
@@ -508,7 +589,6 @@ def ask(req: AskRequest):
             temperature=0.2,
             num_ctx=2048,
         ).strip()
-
         return {"answer": answer}
 
     # 0) Saudação simples
@@ -550,6 +630,38 @@ def ask(req: AskRequest):
         if _user_wants_sources(question):
             response["sources"] = [base_path]
         return response
+    
+
+        # 2.5) BANCO DE TALENTOS via planilha
+    if _is_banco_talentos_question(question):
+        rows = _load_banco_talentos_rows(limit=200)
+
+        if not rows:
+            return {"answer": "O banco de talentos está vazio no momento."}
+
+        total = len(rows)
+
+        # resumo simples
+        nomes = []
+        for r in rows[:10]:
+            nome = (r.get("Nome completo") or "").strip() if r.get("Nome completo") else ""
+            cargo = (r.get("Cargo pretendido") or "").strip() if r.get("Cargo pretendido") else ""
+            nivel = (r.get("Nível") or "").strip() if r.get("Nível") else ""
+
+            linha = f"- {nome or 'Sem nome'}"
+            if cargo:
+                linha += f" | Cargo: {cargo}"
+            if nivel:
+                linha += f" | Nível: {nivel}"
+
+            nomes.append(linha)
+
+        answer = (
+            f"Nosso banco de talentos possui {total} candidato(s) registrado(s).\n\n"
+            f"Primeiros registros:\n" + "\n".join(nomes)
+        )
+
+        return {"answer": answer}
 
     # 3) BANCO DE TALENTOS: busca por perfil/habilidade/cargo com evidência
     if req.use_rag and _looks_like_talent_search_intent(question):
@@ -652,7 +764,6 @@ def ask(req: AskRequest):
                 temperature=0.2,
                 num_ctx=2048,
             ).strip()
-
             return {"answer": answer}
 
         response = {
@@ -689,6 +800,11 @@ def ask(req: AskRequest):
         response["sources"] = sources
 
     return response
+   
+
+
+
+
 
 class ListFilesRequest(BaseModel):
     rel_path: str = ""
