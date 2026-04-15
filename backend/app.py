@@ -1,4 +1,4 @@
-print("### STARIA APP.PY CARREGADO ###")
+print("### StarIA Backend is ON. ###")
 
 import os
 import re

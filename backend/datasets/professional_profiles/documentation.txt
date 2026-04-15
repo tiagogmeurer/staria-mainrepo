@@ -1,0 +1,19 @@
+Documentação do módulo "professional_profiles"
+
+profiles_catalog.json
+É a fonte canônica machine-readable. É o que o backend usa para consultar, normalizar cargos e fazer matching.
+
+profiles_catalog.xlsx
+Camada operacional editável. RH pode: revisar, acrescentar habilidades, ajustar senioridade, incluir novos perfis.
+
+schema.py
+Define a estrutura do perfil com Pydantic.
+
+loader.py
+Carrega o catálogo e expõe funções de leitura.
+
+normalizer.py
+Converte textos como “DA”, “Diretor de Arte”, “Diretor(a) de Arte Sênior Digital” para um role_id padronizado.
+
+sync_profiles.py
+Sincroniza Excel ↔ JSON.
