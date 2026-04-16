@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from datasets.professional_profiles.schema import (
@@ -10,7 +11,24 @@ from datasets.professional_profiles.schema import (
 
 
 BASE_DIR = Path(__file__).resolve().parent
-CATALOG_JSON = BASE_DIR / "profiles_catalog.json"
+LOCAL_CATALOG_JSON = BASE_DIR / "profiles_catalog.json"
+
+DEFAULT_DRIVE_ROOT = os.getenv(
+    "STARIA_DRIVE_ROOT",
+    r"G:\Drives compartilhados\STARMKT\StarIA",
+)
+PROFILES_DIR = Path(
+    os.getenv(
+        "STARIA_PROFILES_DIR",
+        str(Path(DEFAULT_DRIVE_ROOT) / "banco_talentos" / "perfis"),
+    )
+)
+SHARED_CATALOG_XLSX = Path(
+    os.getenv(
+        "STARIA_PROFILES_XLSX",
+        str(PROFILES_DIR / "profiles_catalog.xlsx"),
+    )
+)
 
 
 def _read_json_file(path: Path) -> dict:
@@ -33,13 +51,35 @@ def _read_json_file(path: Path) -> dict:
     return {"profiles": []}
 
 
-def load_profiles_catalog() -> ProfessionalProfilesCatalog:
-    data = _read_json_file(CATALOG_JSON)
+def _read_xlsx_file(path: Path) -> dict:
+    if not path.exists():
+        return {"profiles": []}
+
+    from datasets.professional_profiles.sync_profiles import load_catalog_from_xlsx
+
+    catalog = load_catalog_from_xlsx(path)
+    return catalog.model_dump(mode="json")
+
+
+def get_profiles_catalog_paths() -> dict[str, str]:
+    return {
+        "profiles_dir": str(PROFILES_DIR),
+        "shared_catalog_xlsx": str(SHARED_CATALOG_XLSX),
+        "local_catalog_json": str(LOCAL_CATALOG_JSON),
+    }
+
+
+def load_profiles_catalog(prefer_shared_xlsx: bool = True) -> ProfessionalProfilesCatalog:
+    if prefer_shared_xlsx and SHARED_CATALOG_XLSX.exists():
+        data = _read_xlsx_file(SHARED_CATALOG_XLSX)
+        return ProfessionalProfilesCatalog(**data)
+
+    data = _read_json_file(LOCAL_CATALOG_JSON)
     return ProfessionalProfilesCatalog(**data)
 
 
-def load_profiles() -> list[ProfessionalProfile]:
-    return load_profiles_catalog().profiles
+def load_profiles(prefer_shared_xlsx: bool = True) -> list[ProfessionalProfile]:
+    return load_profiles_catalog(prefer_shared_xlsx=prefer_shared_xlsx).profiles
 
 
 def get_profile_by_role_id(role_id: str) -> ProfessionalProfile | None:

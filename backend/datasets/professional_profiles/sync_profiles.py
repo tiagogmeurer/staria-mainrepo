@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -14,8 +15,24 @@ from datasets.professional_profiles.schema import (
 
 
 BASE_DIR = Path(__file__).resolve().parent
-CATALOG_JSON = BASE_DIR / "profiles_catalog.json"
-CATALOG_XLSX = BASE_DIR / "profiles_catalog.xlsx"
+LOCAL_CATALOG_JSON = BASE_DIR / "profiles_catalog.json"
+
+DEFAULT_DRIVE_ROOT = os.getenv(
+    "STARIA_DRIVE_ROOT",
+    r"G:\Drives compartilhados\STARMKT\StarIA",
+)
+PROFILES_DIR = Path(
+    os.getenv(
+        "STARIA_PROFILES_DIR",
+        str(Path(DEFAULT_DRIVE_ROOT) / "banco_talentos" / "perfis"),
+    )
+)
+SHARED_CATALOG_XLSX = Path(
+    os.getenv(
+        "STARIA_PROFILES_XLSX",
+        str(PROFILES_DIR / "profiles_catalog.xlsx"),
+    )
+)
 
 
 XLSX_HEADERS = [
@@ -49,28 +66,6 @@ XLSX_HEADERS = [
 ]
 
 
-LIST_FIELDS = {
-    "responsibilities",
-    "required_skills",
-    "preferred_skills",
-    "tools",
-    "experience_requirements",
-    "education_requirements",
-    "keywords",
-    "aliases",
-    "source_docs",
-}
-
-
-PERSONA_LIST_FIELDS = {
-    "work_style",
-    "behavioral_traits",
-    "decision_style",
-    "ideal_signals",
-    "risk_signals",
-}
-
-
 def _safe_list(value: Any) -> list[str]:
     if value is None:
         return []
@@ -96,8 +91,7 @@ def _safe_list(value: Any) -> list[str]:
 
 
 def _list_to_cell(value: list[str]) -> str:
-    items = _safe_list(value)
-    return " | ".join(items)
+    return " | ".join(_safe_list(value))
 
 
 def _read_json_file(path: Path) -> dict:
@@ -119,15 +113,21 @@ def _read_json_file(path: Path) -> dict:
     return {"profiles": []}
 
 
-def load_catalog_from_json(path: Path = CATALOG_JSON) -> ProfessionalProfilesCatalog:
+def ensure_profiles_dir(path: Path = PROFILES_DIR) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def load_catalog_from_json(path: Path = LOCAL_CATALOG_JSON) -> ProfessionalProfilesCatalog:
     data = _read_json_file(path)
     return ProfessionalProfilesCatalog(**data)
 
 
 def save_catalog_to_json(
     catalog: ProfessionalProfilesCatalog,
-    path: Path = CATALOG_JSON,
+    path: Path = LOCAL_CATALOG_JSON,
 ) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
     payload = catalog.model_dump(mode="json")
     path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
@@ -171,9 +171,10 @@ def profile_to_row(profile: ProfessionalProfile) -> list[Any]:
 
 
 def export_json_to_xlsx(
-    json_path: Path = CATALOG_JSON,
-    xlsx_path: Path = CATALOG_XLSX,
+    json_path: Path = LOCAL_CATALOG_JSON,
+    xlsx_path: Path = SHARED_CATALOG_XLSX,
 ) -> Path:
+    ensure_profiles_dir(xlsx_path.parent)
     catalog = load_catalog_from_json(json_path)
 
     wb = Workbook()
@@ -202,7 +203,7 @@ def _row_to_profile_dict(headers: list[str], row: list[Any]) -> dict[str, Any]:
         "risk_signals": _safe_list(values.get("persona_risk_signals")),
     }
 
-    profile_data = {
+    return {
         "role_id": (values.get("role_id") or "").strip(),
         "title": (values.get("title") or "").strip(),
         "family": (values.get("family") or "").strip(),
@@ -226,10 +227,8 @@ def _row_to_profile_dict(headers: list[str], row: list[Any]) -> dict[str, Any]:
         "updated_at": (values.get("updated_at") or "").strip(),
     }
 
-    return profile_data
 
-
-def load_catalog_from_xlsx(path: Path = CATALOG_XLSX) -> ProfessionalProfilesCatalog:
+def load_catalog_from_xlsx(path: Path = SHARED_CATALOG_XLSX) -> ProfessionalProfilesCatalog:
     if not path.exists():
         return ProfessionalProfilesCatalog(profiles=[])
 
@@ -257,19 +256,19 @@ def load_catalog_from_xlsx(path: Path = CATALOG_XLSX) -> ProfessionalProfilesCat
 
 
 def export_xlsx_to_json(
-    xlsx_path: Path = CATALOG_XLSX,
-    json_path: Path = CATALOG_JSON,
+    xlsx_path: Path = SHARED_CATALOG_XLSX,
+    json_path: Path = LOCAL_CATALOG_JSON,
 ) -> Path:
     catalog = load_catalog_from_xlsx(xlsx_path)
     return save_catalog_to_json(catalog, json_path)
 
 
 def sync_profiles(
-    source: str = "json",
-    json_path: Path = CATALOG_JSON,
-    xlsx_path: Path = CATALOG_XLSX,
+    source: str = "xlsx",
+    json_path: Path = LOCAL_CATALOG_JSON,
+    xlsx_path: Path = SHARED_CATALOG_XLSX,
 ) -> Path:
-    source_norm = (source or "json").strip().lower()
+    source_norm = (source or "xlsx").strip().lower()
 
     if source_norm == "json":
         return export_json_to_xlsx(json_path=json_path, xlsx_path=xlsx_path)
@@ -281,5 +280,6 @@ def sync_profiles(
 
 
 if __name__ == "__main__":
-    output = sync_profiles("json")
+    ensure_profiles_dir()
+    output = sync_profiles("xlsx")
     print(f"Sync concluído: {output}")
