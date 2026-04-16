@@ -1,0 +1,995 @@
+{
+  "profiles": [
+    {
+      "role_id": "estrategista_senior_planejamento",
+      "title": "Estrategista Sênior — Planejamento",
+      "family": "planejamento",
+      "hub": "assai_house",
+      "seniority": "senior",
+      "work_model": "presencial",
+      "location": "São Paulo - Zona Leste",
+      "summary": "Profissional de planejamento estratégico responsável por construir plataformas de marca, liderar briefings estratégicos e conectar negócio com criação em projetos institucionais e de branding.",
+      "responsibilities": [
+        "Desenvolver plataformas de marca e territórios de comunicação",
+        "Liderar briefings estratégicos para criação e branding",
+        "Atuar como interface entre negócio e criação",
+        "Atuar em projetos especiais e campanhas institucionais"
+      ],
+      "required_skills": [
+        "planejamento estratégico",
+        "branding",
+        "plataforma de marca",
+        "território de comunicação",
+        "arquitetura de marca",
+        "análise de mercado",
+        "desenvolvimento de briefing",
+        "visão de negócio"
+      ],
+      "preferred_skills": [
+        "experiência com contas de grande porte",
+        "experiência com múltiplas frentes simultâneas",
+        "capacidade de simplificar temas complexos"
+      ],
+      "tools": [
+        "ferramentas de posicionamento",
+        "ferramentas de arquitetura de marca",
+        "ferramentas de análise de mercado"
+      ],
+      "experience_requirements": [
+        "experiência sólida em planejamento em agência ou consultoria de marca",
+        "experiência com projetos institucionais",
+        "experiência com branding"
+      ],
+      "education_requirements": [],
+      "keywords": [
+        "estrategista senior",
+        "planejamento",
+        "brand strategy",
+        "branding",
+        "plataforma de marca"
+      ],
+      "aliases": [
+        "estrategista sênior",
+        "estrategista de planejamento",
+        "planejamento sênior",
+        "brand strategist senior"
+      ],
+      "persona": {
+        "archetype": "estrategista tradutor de complexidade",
+        "summary": "Perfil que pensa antes de criar, transforma ambiguidade em direção clara e conecta marca, negócio e criação com profundidade.",
+        "work_style": [
+          "alta capacidade analítica",
+          "protagonismo estratégico",
+          "facilidade para organizar caos",
+          "colaboração transversal"
+        ],
+        "behavioral_traits": [
+          "pensamento estruturado",
+          "maturidade para lidar com pressão",
+          "clareza de comunicação",
+          "profundidade sem prolixidade"
+        ],
+        "decision_style": [
+          "prioriza direção clara antes da execução",
+          "equilibra visão de marca e necessidade de negócio"
+        ],
+        "ideal_signals": [
+          "histórico em agência ou consultoria de marca",
+          "experiência com plataformas e territórios de marca",
+          "consegue construir briefing e direcionamento estratégico"
+        ],
+        "risk_signals": [
+          "planejamento excessivamente teórico",
+          "baixa interface com criação",
+          "pouca experiência com contas complexas"
+        ]
+      },
+      "source_docs": [
+        "Perfis Assaí 2026.pdf"
+      ],
+      "version": 1,
+      "status": "active",
+      "updated_at": "2026-04-15"
+    },
+    {
+      "role_id": "coordenador_conteudo",
+      "title": "Coordenador(a) de Conteúdo",
+      "family": "conteudo",
+      "hub": "assai_house",
+      "seniority": "coordenacao",
+      "work_model": "presencial",
+      "location": "São Paulo - Zona Leste",
+      "summary": "Responsável por construir calendário editorial, zelar pela voz de marca e conectar conteúdo orgânico com objetivos de campanha e negócio.",
+      "responsibilities": [
+        "Propor o calendário editorial da marca",
+        "Desenvolver e guardar a voz de marca",
+        "Conectar conteúdo orgânico com objetivos de campanha e negócio",
+        "Trabalhar com criação, branding e planejamento nas entregas"
+      ],
+      "required_skills": [
+        "gestão de conteúdo",
+        "estratégia editorial",
+        "seo",
+        "tom de voz",
+        "consistência narrativa",
+        "planejamento de conteúdo",
+        "ritmo de publicação digital"
+      ],
+      "preferred_skills": [
+        "vivência com saúde",
+        "vivência com bem-estar",
+        "vivência com varejo"
+      ],
+      "tools": [
+        "ferramentas de planejamento editorial",
+        "ferramentas de SEO",
+        "analytics de conteúdo"
+      ],
+      "experience_requirements": [
+        "experiência em gestão de conteúdo para marcas de médio ou grande porte",
+        "experiência com múltiplas entregas simultâneas"
+      ],
+      "education_requirements": [],
+      "keywords": [
+        "conteudo",
+        "content strategy",
+        "editorial planning",
+        "seo",
+        "voz de marca"
+      ],
+      "aliases": [
+        "coordenador de conteudo",
+        "coordenadora de conteudo",
+        "content manager",
+        "editorial lead"
+      ],
+      "persona": {
+        "archetype": "guardiao narrativo da marca",
+        "summary": "Perfil que entende que conteúdo não é volume, e sim cadência com intenção, coerência e voz de marca.",
+        "work_style": [
+          "organização editorial",
+          "visão de calendário e campanha",
+          "integração com times criativos",
+          "consistência sob volume"
+        ],
+        "behavioral_traits": [
+          "sensibilidade narrativa",
+          "disciplina de execução",
+          "clareza de direção",
+          "bom senso editorial"
+        ],
+        "decision_style": [
+          "prioriza consistência de marca",
+          "conecta conteúdo a objetivo de negócio"
+        ],
+        "ideal_signals": [
+          "experiência em conteúdo para marcas relevantes",
+          "domínio de SEO e ritmo digital",
+          "forte noção de voz de marca"
+        ],
+        "risk_signals": [
+          "produção sem estratégia",
+          "foco excessivo em volume",
+          "pouca sensibilidade narrativa"
+        ]
+      },
+      "source_docs": [
+        "Perfis Assaí 2026.pdf"
+      ],
+      "version": 1,
+      "status": "active",
+      "updated_at": "2026-04-15"
+    },
+    {
+      "role_id": "performance_growth_planejamento",
+      "title": "Performance & Growth — Planejamento",
+      "family": "planejamento_performance",
+      "hub": "assai_house",
+      "seniority": "senior",
+      "work_model": "presencial",
+      "location": "São Paulo - Zona Leste",
+      "summary": "Profissional responsável por monitorar, analisar e otimizar resultados, conectando criação, mídia e negócio por meio de dados e performance.",
+      "responsibilities": [
+        "Monitorar e otimizar resultados de campanha",
+        "Traduzir métricas em narrativas para decisões criativas e de negócio",
+        "Trabalhar junto com criação, planejamento e mídia",
+        "Construir dashboards e relatórios que gerem ação"
+      ],
+      "required_skills": [
+        "performance marketing",
+        "growth",
+        "analytics",
+        "google ads",
+        "meta ads",
+        "visualização de dados",
+        "dashboards",
+        "análise de campanha",
+        "storytelling com dados"
+      ],
+      "preferred_skills": [
+        "visão de negócio",
+        "capacidade de atuação transversal",
+        "postura protagonista"
+      ],
+      "tools": [
+        "google ads",
+        "meta ads",
+        "analytics",
+        "ferramentas de dashboard",
+        "ferramentas de visualização de dados"
+      ],
+      "experience_requirements": [
+        "experiência com performance e growth",
+        "experiência com análise e otimização de campanhas",
+        "experiência em dashboards e relatórios acionáveis"
+      ],
+      "education_requirements": [],
+      "keywords": [
+        "performance",
+        "growth",
+        "data driven",
+        "analytics",
+        "google ads",
+        "meta ads"
+      ],
+      "aliases": [
+        "performance e growth",
+        "performance growth",
+        "analista de performance e growth",
+        "planejamento de performance"
+      ],
+      "persona": {
+        "archetype": "tradutor de resultado em proximo passo",
+        "summary": "Perfil que não vê métrica como fim, e sim como alavanca de decisão criativa e de negócio.",
+        "work_style": [
+          "raciocínio orientado por dados",
+          "colaboração transversal",
+          "foco em otimização contínua",
+          "capacidade analítica com visão de negócio"
+        ],
+        "behavioral_traits": [
+          "curiosidade analítica",
+          "objetividade",
+          "senso crítico",
+          "protagonismo"
+        ],
+        "decision_style": [
+          "prioriza impacto mensurável",
+          "transforma dado em ação"
+        ],
+        "ideal_signals": [
+          "experiência com analytics e mídia paga",
+          "sabe construir dashboards úteis",
+          "consegue explicar números para times criativos"
+        ],
+        "risk_signals": [
+          "perfil excessivamente operacional",
+          "incapacidade de conectar dado e narrativa",
+          "baixa visão de negócio"
+        ]
+      },
+      "source_docs": [
+        "Perfis Assaí 2026.pdf"
+      ],
+      "version": 1,
+      "status": "active",
+      "updated_at": "2026-04-15"
+    },
+    {
+      "role_id": "diretor_arte_senior_campanhas",
+      "title": "Diretor(a) de Arte Sênior — Criação (Campanhas Institucionais)",
+      "family": "criacao",
+      "hub": "assai_house",
+      "seniority": "senior",
+      "work_model": "presencial",
+      "location": "São Paulo - Zona Leste",
+      "summary": "Diretor de Arte Sênior com visão de campanha, repertório visual sólido e capacidade de elevar o padrão criativo de campanhas institucionais e digitais.",
+      "responsibilities": [
+        "Desenvolver conceito e execução visual em campanhas de grande alcance",
+        "Garantir consistência e elevação do padrão criativo",
+        "Trabalhar com redação, branding e planejamento do briefing à entrega",
+        "Referenciar e inspirar o time"
+      ],
+      "required_skills": [
+        "direção de arte",
+        "conceito de campanha",
+        "execução visual",
+        "campanhas institucionais",
+        "campanhas digitais",
+        "visão de campanha",
+        "repertório visual"
+      ],
+      "preferred_skills": [
+        "experiência em varejo",
+        "experiência em alimentação"
+      ],
+      "tools": [
+        "photoshop",
+        "illustrator",
+        "adobe creative suite",
+        "IA"
+      ],
+      "experience_requirements": [
+        "experiência sólida como diretor de arte em agência ou operação de grande porte",
+        "portfólio com entregas institucionais, digitais e de varejo"
+      ],
+      "education_requirements": [],
+      "keywords": [
+        "diretor de arte",
+        "campanha publicitaria",
+        "design de campanha",
+        "publicidade"
+      ],
+      "aliases": [
+        "diretor de arte senior",
+        "da senior campanhas",
+        "diretor de arte institucional"
+      ],
+      "persona": {
+        "archetype": "definidor de padrao criativo",
+        "summary": "Perfil que não apenas executa, mas define o nível visual da entrega e inspira o entorno criativo.",
+        "work_style": [
+          "liderança criativa",
+          "alta exigência estética",
+          "parceria intensa com redação e planejamento",
+          "visão do conceito ao acabamento"
+        ],
+        "behavioral_traits": [
+          "repertório visual robusto",
+          "ownership criativo",
+          "consistência sob pressão",
+          "criticidade visual"
+        ],
+        "decision_style": [
+          "prioriza impacto visual com coerência de campanha",
+          "eleva padrão sem perder viabilidade"
+        ],
+        "ideal_signals": [
+          "portfólio forte em campanhas institucionais",
+          "domínio de Adobe e IA",
+          "histórico em operações ou agências de grande porte"
+        ],
+        "risk_signals": [
+          "portfólio fraco em campanha",
+          "boa execução sem visão conceitual",
+          "baixa consistência em diferentes formatos"
+        ]
+      },
+      "source_docs": [
+        "Perfis Assaí 2026.pdf"
+      ],
+      "version": 1,
+      "status": "active",
+      "updated_at": "2026-04-15"
+    },
+    {
+      "role_id": "diretor_arte_senior_branding_produto",
+      "title": "Diretor(a) de Arte Sênior — Criação (Identidade e Branding de Produto)",
+      "family": "criacao_branding",
+      "hub": "assai_house",
+      "seniority": "senior",
+      "work_model": "presencial",
+      "location": "São Paulo - Zona Leste",
+      "summary": "Diretor de Arte Sênior voltado à criação de identidades visuais e sistemas de marca para projetos de produto, com olhar sistêmico e domínio de branding.",
+      "responsibilities": [
+        "Desenvolver identidades visuais e sistemas de marca",
+        "Criar linguagem visual consistente em múltiplos canais",
+        "Trabalhar com branding e planejamento na construção do posicionamento visual",
+        "Garantir coerência entre conceito de marca e execução criativa"
+      ],
+      "required_skills": [
+        "identidade visual",
+        "branding de produto",
+        "sistema de marca",
+        "linguagem visual",
+        "posicionamento visual",
+        "olhar sistêmico"
+      ],
+      "preferred_skills": [
+        "experiência com varejo",
+        "experiência com marcas de consumo",
+        "experiência com categorias de produto"
+      ],
+      "tools": [
+        "illustrator",
+        "indesign",
+        "adobe creative suite",
+        "IA"
+      ],
+      "experience_requirements": [
+        "experiência em design de identidade visual e branding de produto",
+        "portfólio com projetos de identidade e branding"
+      ],
+      "education_requirements": [],
+      "keywords": [
+        "branding",
+        "identidade visual",
+        "branding de produto",
+        "design de marca"
+      ],
+      "aliases": [
+        "diretor de arte branding",
+        "da branding",
+        "diretor de arte identidade visual"
+      ],
+      "persona": {
+        "archetype": "construtor de sistemas de marca",
+        "summary": "Perfil que pensa marca como linguagem e sistema, não como peça isolada.",
+        "work_style": [
+          "pensamento sistêmico",
+          "profundidade em branding",
+          "coerência entre conceito e execução",
+          "capacidade de construir linguagem proprietária"
+        ],
+        "behavioral_traits": [
+          "rigor visual",
+          "visão de marca",
+          "refinamento estético",
+          "consistência"
+        ],
+        "decision_style": [
+          "prioriza coerência de linguagem",
+          "pensa longo prazo de marca"
+        ],
+        "ideal_signals": [
+          "portfólio de identidades completas",
+          "forte domínio de branding",
+          "capacidade de estruturar sistemas visuais"
+        ],
+        "risk_signals": [
+          "portfólio focado só em peças soltas",
+          "baixa capacidade sistêmica",
+          "pouca profundidade em posicionamento visual"
+        ]
+      },
+      "source_docs": [
+        "Perfis Assaí 2026.pdf"
+      ],
+      "version": 1,
+      "status": "active",
+      "updated_at": "2026-04-15"
+    },
+    {
+      "role_id": "diretor_arte_senior_digital",
+      "title": "Diretor(a) de Arte Sênior Digital — Criação (Performance e Marketplace)",
+      "family": "criacao_digital",
+      "hub": "assai_house",
+      "seniority": "senior",
+      "work_model": "presencial",
+      "location": "São Paulo - Zona Leste",
+      "summary": "Diretor de Arte Sênior com foco em performance, marketplace e formatos digitais de alta cadência, combinando velocidade, consistência e visão de resultado.",
+      "responsibilities": [
+        "Criar e adaptar peças para performance e marketplace digital",
+        "Desenvolver formatos nativos para redes sociais, campanhas digitais e parcerias",
+        "Trabalhar com alta cadência sem perder qualidade",
+        "Colaborar com time de performance para alinhar criação e resultado"
+      ],
+      "required_skills": [
+        "direção de arte digital",
+        "performance digital",
+        "marketplace",
+        "formatos nativos",
+        "criação para redes sociais",
+        "cadência alta",
+        "consistência visual"
+      ],
+      "preferred_skills": [
+        "experiência com marketplace",
+        "experiência com varejo digital"
+      ],
+      "tools": [
+        "meta ads",
+        "google ads",
+        "ferramentas de criação digital",
+        "adobe creative suite",
+        "IA"
+      ],
+      "experience_requirements": [
+        "experiência em criação digital com foco em performance",
+        "portfólio com entregas digitais de alto volume e qualidade"
+      ],
+      "education_requirements": [],
+      "keywords": [
+        "diretor de arte digital",
+        "performance",
+        "marketplace",
+        "digital creative"
+      ],
+      "aliases": [
+        "da digital",
+        "diretor de arte performance",
+        "diretor de arte marketplace"
+      ],
+      "persona": {
+        "archetype": "criativo de alta cadencia orientado a resultado",
+        "summary": "Perfil que vive o digital, domina formato e escala sem abrir mão de padrão.",
+        "work_style": [
+          "velocidade com consistência",
+          "foco em formatos digitais",
+          "colaboração com performance",
+          "mentalidade orientada a escala"
+        ],
+        "behavioral_traits": [
+          "agilidade",
+          "adaptabilidade",
+          "disciplina visual",
+          "resiliência sob volume"
+        ],
+        "decision_style": [
+          "equilibra criação e conversão",
+          "prioriza formatos aderentes ao canal"
+        ],
+        "ideal_signals": [
+          "portfólio com performance e marketplace",
+          "histórico em ambientes de alta cadência",
+          "boa leitura de contexto digital"
+        ],
+        "risk_signals": [
+          "perfil muito institucional",
+          "baixa familiaridade com performance",
+          "lentidão para adaptação de formatos"
+        ]
+      },
+      "source_docs": [
+        "Perfis Assaí 2026.pdf"
+      ],
+      "version": 1,
+      "status": "active",
+      "updated_at": "2026-04-15"
+    },
+    {
+      "role_id": "motion_designer",
+      "title": "Motion Designer — Criação",
+      "family": "criacao_motion",
+      "hub": "assai_house",
+      "seniority": "pleno_senior",
+      "work_model": "presencial",
+      "location": "São Paulo - Zona Leste",
+      "summary": "Profissional de motion responsável por transformar identidade de marca em movimento, criando peças animadas, vídeos e reels para campanhas e ativações digitais.",
+      "responsibilities": [
+        "Criar peças em motion para campanhas e redes sociais",
+        "Desenvolver animações e vídeos alinhados à identidade da marca",
+        "Trabalhar com direção de arte e criação do conceito ao arquivo final",
+        "Garantir qualidade em entregas de alto volume e velocidade"
+      ],
+      "required_skills": [
+        "motion design",
+        "animação",
+        "vídeo",
+        "narrativa visual",
+        "ritmo",
+        "timing",
+        "produção de reels"
+      ],
+      "preferred_skills": [
+        "experiência com varejo",
+        "experiência com comunicação de produto"
+      ],
+      "tools": [
+        "after effects",
+        "premiere",
+        "ferramentas de animação"
+      ],
+      "experience_requirements": [
+        "experiência com reels, vídeos institucionais e peças digitais animadas",
+        "portfólio com motion para marca ou campanhas"
+      ],
+      "education_requirements": [],
+      "keywords": [
+        "motion design",
+        "motion designer",
+        "animacao",
+        "video criativo",
+        "after effects"
+      ],
+      "aliases": [
+        "motion",
+        "designer motion",
+        "animador",
+        "video motion"
+      ],
+      "persona": {
+        "archetype": "tradutor de marca em movimento",
+        "summary": "Perfil que entende ritmo, narrativa e impacto visual em ambientes digitais rápidos.",
+        "work_style": [
+          "execução com senso de timing",
+          "integração com criação",
+          "alto volume com qualidade",
+          "forte senso narrativo"
+        ],
+        "behavioral_traits": [
+          "dinamismo",
+          "atenção a ritmo",
+          "sensibilidade audiovisual",
+          "acabamento técnico"
+        ],
+        "decision_style": [
+          "prioriza clareza e impacto em movimento",
+          "pensa a marca além do estático"
+        ],
+        "ideal_signals": [
+          "repertório forte em reels e animação",
+          "domínio técnico de motion",
+          "portfólio com variedade de formatos"
+        ],
+        "risk_signals": [
+          "motion excessivamente genérico",
+          "baixa noção de ritmo",
+          "execução técnica sem narrativa"
+        ]
+      },
+      "source_docs": [
+        "Perfis Assaí 2026.pdf"
+      ],
+      "version": 1,
+      "status": "active",
+      "updated_at": "2026-04-15"
+    },
+    {
+      "role_id": "redator_digital",
+      "title": "Redator(a) Digital — Criação (Saúde, Bem Estar e Conteúdo Digital)",
+      "family": "criacao_redacao",
+      "hub": "assai_house",
+      "seniority": "pleno_senior",
+      "work_model": "presencial",
+      "location": "São Paulo - Zona Leste",
+      "summary": "Redator digital focado em conteúdo de saúde, bem-estar e digital, capaz de escrever com clareza, intenção e consistência de marca em alto volume.",
+      "responsibilities": [
+        "Criar copy para campanhas digitais e redes sociais",
+        "Desenvolver conteúdo para categorias de saúde e bem-estar",
+        "Trabalhar com planejamento, branding e direção de arte",
+        "Manter ritmo de publicação com qualidade e voz de marca"
+      ],
+      "required_skills": [
+        "redação publicitária",
+        "copywriting digital",
+        "conteúdo digital",
+        "adaptação de tom de voz",
+        "clareza de linguagem",
+        "consistência de marca"
+      ],
+      "preferred_skills": [
+        "vivência com saúde",
+        "vivência com bem-estar",
+        "vivência com varejo",
+        "experiência com categorias reguladas"
+      ],
+      "tools": [
+        "ferramentas de produção de conteúdo",
+        "ferramentas de publicação digital"
+      ],
+      "experience_requirements": [
+        "experiência em redação publicitária digital com alto volume",
+        "familiaridade com comunicação de saúde, bem-estar ou varejo"
+      ],
+      "education_requirements": [],
+      "keywords": [
+        "redacao",
+        "copywriting digital",
+        "conteudo de saude",
+        "redacao publicitaria"
+      ],
+      "aliases": [
+        "redator digital",
+        "copywriter digital",
+        "redatora digital"
+      ],
+      "persona": {
+        "archetype": "redator com ponto de vista e precisão",
+        "summary": "Perfil que escreve com intenção estratégica, clareza e domínio de tom em contextos de marca e volume digital.",
+        "work_style": [
+          "agilidade com rigor",
+          "consistência de voz",
+          "integração com criação e branding",
+          "adaptação por canal"
+        ],
+        "behavioral_traits": [
+          "clareza",
+          "disciplina textual",
+          "sensibilidade de linguagem",
+          "criticidade editorial"
+        ],
+        "decision_style": [
+          "prioriza precisão sem perder ritmo",
+          "adapta tom mantendo marca"
+        ],
+        "ideal_signals": [
+          "histórico em digital de alta cadência",
+          "boa escrita em temas mais técnicos",
+          "forte noção de posicionamento de marca"
+        ],
+        "risk_signals": [
+          "copy genérica",
+          "baixa adaptação de canal",
+          "ritmo sem consistência narrativa"
+        ]
+      },
+      "source_docs": [
+        "Perfis Assaí 2026.pdf"
+      ],
+      "version": 1,
+      "status": "active",
+      "updated_at": "2026-04-15"
+    },
+    {
+      "role_id": "atendimento_senior",
+      "title": "Atendimento Sênior — Operação",
+      "family": "atendimento_operacao",
+      "hub": "assai_house",
+      "seniority": "senior",
+      "work_model": "presencial",
+      "location": "São Paulo - Zona Leste",
+      "summary": "Profissional de atendimento responsável por ser a ponte entre clientes internos e criação, garantindo briefing, relacionamento, prazo, organização e qualidade.",
+      "responsibilities": [
+        "Fazer interface entre clientes internos e time criativo",
+        "Construir e gerir briefings com profundidade",
+        "Acompanhar entregas, prazos e aprovações",
+        "Organizar demandas e proteger o tempo estratégico da equipe"
+      ],
+      "required_skills": [
+        "atendimento",
+        "gestão de briefing",
+        "gestão de projetos",
+        "organização",
+        "comunicação",
+        "prestação de conta",
+        "processo",
+        "relacionamento"
+      ],
+      "preferred_skills": [
+        "experiência com varejo",
+        "experiência com consumo massivo",
+        "experiência em alto volume de entregas"
+      ],
+      "tools": [
+        "ferramentas de gestão de projetos",
+        "ferramentas de acompanhamento de demandas"
+      ],
+      "experience_requirements": [
+        "experiência sólida em atendimento em agência ou operação criativa interna",
+        "capacidade de traduzir demanda de negócio em briefing criativo"
+      ],
+      "education_requirements": [],
+      "keywords": [
+        "atendimento",
+        "account manager",
+        "gestao de projetos",
+        "operacao"
+      ],
+      "aliases": [
+        "account manager",
+        "atendimento senior",
+        "atendimento operacao"
+      ],
+      "persona": {
+        "archetype": "ponte que faz tudo funcionar",
+        "summary": "Perfil que equilibra relacionamento e rigor de processo, sem deixar o projeto desorganizar o time.",
+        "work_style": [
+          "forte organização",
+          "interface constante com múltiplos stakeholders",
+          "gestão de fluxo",
+          "clareza de priorização"
+        ],
+        "behavioral_traits": [
+          "jogo de cintura",
+          "responsabilidade",
+          "clareza de comunicação",
+          "resiliência sob pressão"
+        ],
+        "decision_style": [
+          "prioriza alinhamento e continuidade do projeto",
+          "protege o time sem perder o cliente"
+        ],
+        "ideal_signals": [
+          "experiência em atendimento de agência",
+          "briefings bem estruturados",
+          "boa gestão de prazo e relacionamento"
+        ],
+        "risk_signals": [
+          "perfil reativo",
+          "baixa profundidade de briefing",
+          "desorganização sob pressão"
+        ]
+      },
+      "source_docs": [
+        "Perfis Assaí 2026.pdf"
+      ],
+      "version": 1,
+      "status": "active",
+      "updated_at": "2026-04-15"
+    },
+    {
+      "role_id": "diagramador_ofertas",
+      "title": "Diagramador(a) de Ofertas",
+      "family": "design_editorial",
+      "hub": "assai_house",
+      "seniority": "pleno_senior",
+      "work_model": "presencial",
+      "location": "São Paulo - Zona Leste",
+      "summary": "Diagramador de varejo responsável por materiais promocionais em escala, com alto rigor técnico, velocidade e consistência visual.",
+      "responsibilities": [
+        "Diagramar encartes, tabelas de preço e materiais promocionais",
+        "Organizar comunicação de produto para múltiplos formatos",
+        "Manter padrão visual em alto volume",
+        "Garantir coerência entre linguagem de marca e execução gráfica"
+      ],
+      "required_skills": [
+        "diagramacao",
+        "design editorial",
+        "material promocional",
+        "comunicacao de varejo",
+        "precisao tecnica",
+        "organizacao"
+      ],
+      "preferred_skills": [
+        "experiência com varejo",
+        "experiência com atacado",
+        "experiência com consumo massivo"
+      ],
+      "tools": [
+        "indesign",
+        "illustrator"
+      ],
+      "experience_requirements": [
+        "experiência com produção editorial ou gráfica para varejo",
+        "capacidade de trabalhar com alto volume sem perder qualidade"
+      ],
+      "education_requirements": [],
+      "keywords": [
+        "diagramacao",
+        "design editorial",
+        "material promocional",
+        "varejo"
+      ],
+      "aliases": [
+        "diagramador",
+        "diagramadora",
+        "diagramador de ofertas",
+        "designer editorial varejo"
+      ],
+      "persona": {
+        "archetype": "executor tecnico de alto rigor",
+        "summary": "Perfil obcecado por detalhe, velocidade e consistência, especialmente em materiais promocionais de varejo.",
+        "work_style": [
+          "precisão técnica",
+          "alto volume com disciplina",
+          "organização meticulosa",
+          "forte aderência a padrão"
+        ],
+        "behavioral_traits": [
+          "atenção ao detalhe",
+          "capricho",
+          "disciplina",
+          "foco"
+        ],
+        "decision_style": [
+          "prioriza exatidão visual e técnica",
+          "encontra erro antes dos outros"
+        ],
+        "ideal_signals": [
+          "histórico com encartes e promoções",
+          "domínio de InDesign e Illustrator",
+          "forte consistência em materiais de varejo"
+        ],
+        "risk_signals": [
+          "baixa atenção a detalhe",
+          "lentidão excessiva",
+          "fraca experiência com materiais promocionais"
+        ]
+      },
+      "source_docs": [
+        "Perfis Assaí 2026.pdf"
+      ],
+      "version": 1,
+      "status": "active",
+      "updated_at": "2026-04-15"
+    },
+    {
+      "role_id": "executivo_de_contas",
+      "title": "Executivo de Contas",
+      "family": "comercial",
+      "hub": "star_comercial",
+      "seniority": "pleno_senior",
+      "work_model": "presencial_hibrido_viagens",
+      "location": "Brasil",
+      "summary": "Profissional responsável por atender, desenvolver novos clientes, reter carteiras e atuar como ponte estratégica entre necessidades do cliente e objetivos da Star.",
+      "responsibilities": [
+        "Gerenciar carteira de clientes e retenção",
+        "Prospectar novas oportunidades de negócio",
+        "Atuar como farmer e hunter",
+        "Executar venda consultiva",
+        "Mapear processos e desafios do cliente",
+        "Negociar contratos e reajustes",
+        "Produzir relatórios periódicos de status",
+        "Conduzir monitoramento contínuo de clientes",
+        "Desenvolver plano operacional por cliente"
+      ],
+      "required_skills": [
+        "gestão de carteira",
+        "prospecção",
+        "venda consultiva",
+        "negociação",
+        "fidelização",
+        "upselling",
+        "cross-selling",
+        "kyc",
+        "análise de risco",
+        "relacionamento comercial",
+        "comunicação",
+        "resiliência",
+        "organização",
+        "visão analítica de mercado"
+      ],
+      "preferred_skills": [
+        "acesso a primeiro nível do cliente",
+        "experiência com software",
+        "experiência com tecnologia",
+        "experiência com serviços"
+      ],
+      "tools": [
+        "crm",
+        "relatórios executivos",
+        "ferramentas de acompanhamento comercial"
+      ],
+      "experience_requirements": [
+        "experiência com vendas de serviços, software ou tecnologia",
+        "experiência com prospecção e retenção",
+        "experiência em venda consultiva e negociação"
+      ],
+      "education_requirements": [
+        "ensino superior completo em marketing, publicidade, administração ou áreas correlatas"
+      ],
+      "keywords": [
+        "executivo de contas",
+        "account executive",
+        "hunter",
+        "farmer",
+        "venda consultiva",
+        "kyc"
+      ],
+      "aliases": [
+        "account executive",
+        "exec contas",
+        "executivo comercial",
+        "executivo de atendimento comercial"
+      ],
+      "persona": {
+        "archetype": "comercial consultivo de relacionamento e expansão",
+        "summary": "Perfil que entende negócio, constrói relacionamento, gera receita e atua com presença forte junto ao cliente.",
+        "work_style": [
+          "forte presença comercial",
+          "atuação consultiva",
+          "equilíbrio entre retenção e expansão",
+          "ritmo de acompanhamento constante"
+        ],
+        "behavioral_traits": [
+          "resiliência",
+          "organização",
+          "comunicação",
+          "engajamento",
+          "responsabilidade"
+        ],
+        "decision_style": [
+          "prioriza receita com valor agregado",
+          "equilibra benefício para Star e cliente"
+        ],
+        "ideal_signals": [
+          "histórico em carteira e prospecção",
+          "boa capacidade de negociação",
+          "forte entendimento de cliente e mercado"
+        ],
+        "risk_signals": [
+          "perfil apenas relacional sem fechamento",
+          "baixa disciplina comercial",
+          "pouca capacidade de leitura estratégica do cliente"
+        ]
+      },
+      "source_docs": [
+        "Starmkt I Perfil Executivo de Contas.pdf"
+      ],
+      "version": 1,
+      "status": "active",
+      "updated_at": "2026-04-15"
+    }
+  ]
+}

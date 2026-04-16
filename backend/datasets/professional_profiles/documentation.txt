@@ -1,19 +1,96 @@
-Documentação do módulo "professional_profiles"
+PROFESSIONAL PROFILES — STARIA / STARNODEV0
 
-profiles_catalog.json
-É a fonte canônica machine-readable. É o que o backend usa para consultar, normalizar cargos e fazer matching.
+Objetivo
+--------
+Este dataset representa o catálogo institucional de funções da StarMKT.
+Ele NÃO contém candidatos.
+Ele existe para ensinar ao StarIA:
+1. quais cargos existem;
+2. quais habilidades, ferramentas e experiências são esperadas;
+3. qual é a persona ideal para cada função;
+4. como cruzar isso com o banco de talentos.
 
-profiles_catalog.xlsx
-Camada operacional editável. RH pode: revisar, acrescentar habilidades, ajustar senioridade, incluir novos perfis.
-
+Arquivos
+--------
 schema.py
-Define a estrutura do perfil com Pydantic.
+    Define a estrutura oficial dos perfis profissionais.
 
 loader.py
-Carrega o catálogo e expõe funções de leitura.
+    Carrega o catálogo e expõe funções de leitura.
 
 normalizer.py
-Converte textos como “DA”, “Diretor de Arte”, “Diretor(a) de Arte Sênior Digital” para um role_id padronizado.
+    Normaliza nomes de cargos, aliases e consultas do RH para role_id.
 
 sync_profiles.py
-Sincroniza Excel ↔ JSON.
+    Sincroniza a planilha editável com o JSON canônico.
+
+profiles_catalog.json
+    Fonte canônica consumida pelo sistema.
+
+profiles_catalog.xlsx
+    Fonte operacional editável por humanos.
+
+Conceitos
+---------
+professional_profiles
+    Catálogo institucional das funções.
+
+banco_talentos
+    Candidatos reais recebidos por email/Telegram.
+
+matching_engine
+    Camada que compara candidatos x perfis ideais.
+
+Estrutura mínima de um perfil
+-----------------------------
+- role_id
+- title
+- family
+- hub
+- seniority
+- work_model
+- location
+- summary
+- responsibilities
+- required_skills
+- preferred_skills
+- tools
+- experience_requirements
+- education_requirements
+- keywords
+- aliases
+- persona
+- source_docs
+- version
+- status
+- updated_at
+
+Persona
+-------
+Cada função deve possuir uma persona ideal.
+A persona não substitui os requisitos objetivos.
+Ela complementa com:
+- estilo de trabalho
+- traços comportamentais
+- sinais de aderência
+- sinais de risco
+- tipo de protagonismo esperado
+
+Governança
+----------
+1. Novos cargos devem ser adicionados primeiro na planilha operacional.
+2. Depois, sincronizar para o JSON canônico.
+3. O role_id nunca deve mudar depois de criado.
+4. Aliases podem crescer com o tempo.
+5. source_docs deve registrar a origem institucional da definição.
+
+Uso futuro
+----------
+O StarIA usará este dataset para:
+- normalizar cargos;
+- sugerir role_id para candidatos;
+- calcular aderência;
+- montar shortlists;
+- responder perguntas do RH;
+- comparar candidatos com a persona ideal da função.
+- aplicar uma nota para os candidatos selecionados e registra-los no banco_talentos
