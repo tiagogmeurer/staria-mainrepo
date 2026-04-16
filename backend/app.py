@@ -9,6 +9,8 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from datasets.professional_profiles.loader import get_profiles_catalog_paths
+
 from tools.ollama_client import ollama_chat
 from tools.spreadsheets import read_excel_preview, compute_basic_stats
 from tools.drive_sync import list_files
@@ -67,6 +69,18 @@ def _safe_base() -> Path:
 def _curriculos_base() -> Path:
     return _safe_base() / "curriculos"
 
+def _profiles_base() -> Path:
+    env_path = os.getenv("STARIA_PROFILES_DIR")
+    if env_path:
+        return Path(env_path)
+    return _safe_base() / "banco_talentos" / "perfis"
+
+
+def _profiles_catalog_xlsx() -> Path:
+    env_path = os.getenv("STARIA_PROFILES_XLSX")
+    if env_path:
+        return Path(env_path)
+    return _profiles_base() / "profiles_catalog.xlsx"
 
 @app.on_event("startup")
 def startup_check():
@@ -75,6 +89,15 @@ def startup_check():
     print("[StarIA] DRIVE_ROOT =", DRIVE_ROOT)
     print("[StarIA] CURRICULOS_PATH =", str(_curriculos_base()))
     print("[StarIA] CURRICULOS_EXISTS =", _curriculos_base().exists())
+
+    print("[StarIA] PROFILES_DIR =", str(_profiles_base()))
+    print("[StarIA] PROFILES_CATALOG_XLSX =", str(_profiles_catalog_xlsx()))
+    print("[StarIA] PROFILES_EXISTS =", _profiles_catalog_xlsx().exists())
+
+    try:
+        print("[StarIA] PROFILES_PATHS =", get_profiles_catalog_paths())
+    except Exception as e:
+        print("[StarIA] PROFILES_PATHS_ERROR =", repr(e))
 
 
 class AskRequest(BaseModel):
@@ -88,6 +111,18 @@ def health():
     return {
         "service": "StarNodeV0",
         "status": "online"
+    }
+
+@app.get("/debug/paths")
+def debug_paths():
+    return {
+        "drive_root": str(_safe_base()),
+        "curriculos_path": str(_curriculos_base()),
+        "curriculos_exists": _curriculos_base().exists(),
+        "profiles_dir": str(_profiles_base()),
+        "profiles_dir_exists": _profiles_base().exists(),
+        "profiles_catalog_xlsx": str(_profiles_catalog_xlsx()),
+        "profiles_catalog_exists": _profiles_catalog_xlsx().exists(),
     }
 
 

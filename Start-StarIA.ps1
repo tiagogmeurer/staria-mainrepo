@@ -11,8 +11,19 @@ Write-Host "🚀 Inicializando StarIA..." -ForegroundColor Cyan
 # ==============================
 $env:ANONYMIZED_TELEMETRY="FALSE"
 $env:OTEL_SDK_DISABLED="true"
+
+$env:STARIA_DRIVE_ROOT="G:\Drives compartilhados\STARMKT\StarIA"
 $env:DRIVE_SYNC_ROOT="G:\Drives compartilhados\STARMKT\StarIA"
+
+$env:STARIA_PROFILES_DIR="G:\Drives compartilhados\STARMKT\StarIA\banco_talentos\perfis"
+$env:STARIA_PROFILES_XLSX="G:\Drives compartilhados\STARMKT\StarIA\banco_talentos\perfis\profiles_catalog.xlsx"
+
 $env:STAR_OLLAMA_MODEL="star-llama:latest"
+
+# Garante pasta operacional dos perfis
+if (-not (Test-Path $env:STARIA_PROFILES_DIR)) {
+    New-Item -ItemType Directory -Path $env:STARIA_PROFILES_DIR -Force | Out-Null
+}
 
 # ==============================
 # 2) Verificar Ollama
@@ -62,7 +73,7 @@ Start-Sleep -Seconds 3
 Write-Host "🔎 Testando API..."
 
 try {
-    $health = Invoke-WebRequest -Uri "http://127.0.0.1:8088/healthz" -UseBasicParsing -TimeoutSec 3
+    $health = Invoke-WebRequest -Uri "http://127.0.0.1:8088/health" -UseBasicParsing -TimeoutSec 3
     Write-Host "✅ API saudável"
 }
 catch {
@@ -88,4 +99,5 @@ Write-Host ""
 Write-Host "🔥 StarIA ONLINE" -ForegroundColor Green
 Write-Host "🌐 API: http://127.0.0.1:8088/docs"
 Write-Host "🤖 Bot: ativo no Telegram"
+Write-Host "📁 Perfis: $env:STARIA_PROFILES_XLSX"
 Write-Host ""
