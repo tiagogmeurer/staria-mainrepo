@@ -107,6 +107,13 @@ def _looks_like_profile_matching_intent(q: str) -> bool:
     ]
     return any(t in ql for t in triggers)
 
+def _run_profile_matching(question: str) -> dict:
+    return search_candidates_by_profile_query(
+        query=question,
+        limit=5,
+        min_score=0.10,
+    )
+
 def _profiles_base() -> Path:
     env_path = os.getenv("STARIA_PROFILES_DIR")
     if env_path:
@@ -811,17 +818,18 @@ def ask(req: AskRequest):
     if _is_greeting(question):
         return {"answer": _get_greeting_reply()}
     
+    # 0-D) intenção de matching de perfil profissional
     if _looks_like_profile_matching_intent(question):
-        result = search_candidates_by_profile_query(
-            query=question,
-            limit=10,
-            min_score=0.15,
-        )
-        return {
-            "answer": format_match_summary(result),
-            "profile_match": result.get("profile"),
-            "matches": result.get("matches", []),
-        }
+        result = _run_profile_matching(question)
+
+    # se encontrou candidatos aderentes, responde imediatamente
+        if result.get("matches"):
+            return {
+               "answer": format_match_summary(result),
+               "profile_match": result.get("profile"),
+               "matches": result.get("matches", []),
+            }
+
 
     # 1) INVENTÁRIO: contagem real de currículos
     if _is_count_curriculos_intent(question):
