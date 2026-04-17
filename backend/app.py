@@ -17,6 +17,13 @@ from tools.drive_sync import list_files
 from tools.automations import create_folder, write_text_report
 from rag.retriever import retrieve
 
+from datasets.professional_profiles.loader import get_profiles_catalog_paths
+from datasets.professional_profiles.matching_engine import (
+    search_candidates_by_profile_query,
+    format_match_summary,
+)
+
+
 APP_NAME = "StarIA"
 MODEL_DEFAULT = os.getenv("STAR_OLLAMA_MODEL", "star-llama:latest")
 
@@ -69,6 +76,37 @@ def _safe_base() -> Path:
 def _curriculos_base() -> Path:
     return _safe_base() / "curriculos"
 
+
+def _profiles_base() -> Path:
+    env_path = os.getenv("STARIA_PROFILES_DIR")
+    if env_path:
+        return Path(env_path)
+    return _safe_base() / "banco_talentos" / "perfis"
+
+
+def _profiles_catalog_xlsx() -> Path:
+    env_path = os.getenv("STARIA_PROFILES_XLSX")
+    if env_path:
+        return Path(env_path)
+    return _profiles_base() / "profiles_catalog.xlsx"
+
+
+def _looks_like_profile_matching_intent(q: str) -> bool:
+    ql = _search_norm(q)
+    triggers = [
+        "preciso de",
+        "procuro",
+        "quero encontrar",
+        "quais candidatos",
+        "melhores candidatos",
+        "aderencia",
+        "aderência",
+        "perfil ideal",
+        "mais aderente",
+        "mais aderentes",
+    ]
+    return any(t in ql for t in triggers)
+
 def _profiles_base() -> Path:
     env_path = os.getenv("STARIA_PROFILES_DIR")
     if env_path:
@@ -99,11 +137,15 @@ def startup_check():
     except Exception as e:
         print("[StarIA] PROFILES_PATHS_ERROR =", repr(e))
 
-
 class AskRequest(BaseModel):
     question: str
     model: str | None = None
     use_rag: bool = True
+
+class MatchRequest(BaseModel):
+    query: str
+    limit: int = 10
+    min_score: float = 0.15
 
 
 @app.get("/health")
@@ -768,6 +810,18 @@ def ask(req: AskRequest):
     # 0-C) Saudação simples
     if _is_greeting(question):
         return {"answer": _get_greeting_reply()}
+    
+    if _looks_like_profile_matching_intent(question):
+        result = search_candidates_by_profile_query(
+            query=question,
+            limit=10,
+            min_score=0.15,
+        )
+        return {
+            "answer": format_match_summary(result),
+            "profile_match": result.get("profile"),
+            "matches": result.get("matches", []),
+        }
 
     # 1) INVENTÁRIO: contagem real de currículos
     if _is_count_curriculos_intent(question):
@@ -1059,6 +1113,32 @@ def automation_write_report(req: AutomationWriteReport):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/match")
+def match_candidates(req: MatchRequest):
+    result = search_candidates_by_profile_query(
+        query=req.query,
+        limit=req.limit,
+        min_score=req.min_score,
+    )
+    return {
+        "answer": format_match_summary(result),
+        "profile_match": result.get("profile"),
+        "matches": result.get("matches", []),
+        "total_candidates": result.get("total_candidates", 0),
+    }
+
+
+@app.get("/debug/paths")
+def debug_paths():
+    return {
+        "drive_root": str(_safe_base()),
+        "curriculos_path": str(_curriculos_base()),
+        "curriculos_exists": _curriculos_base().exists(),
+        "profiles_dir": str(_profiles_base()),
+        "profiles_dir_exists": _profiles_base().exists(),
+        "profiles_catalog_xlsx": str(_profiles_catalog_xlsx()),
+        "profiles_catalog_exists": _profiles_catalog_xlsx().exists(),
+    }
 
 @app.get("/debug/curriculos-path")
 def debug_curriculos_path():
