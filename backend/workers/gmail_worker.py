@@ -2,11 +2,17 @@ import imaplib
 import email
 from email.header import decode_header
 from email.utils import parseaddr
+
 import os
 from pathlib import Path
 import datetime
 import re
 import json
+import unicodedata
+
+
+
+
 from typing import Any
 
 import requests
@@ -14,7 +20,6 @@ from dotenv import load_dotenv
 from openpyxl import load_workbook
 from pypdf import PdfReader
 from docx import Document
-
 
 # =========================
 # LOAD .ENV DO BACKEND
@@ -31,10 +36,18 @@ load_dotenv(BASE_DIR / ".env", override=True)
 IMAP_SERVER = "imap.gmail.com"
 
 EMAIL_ACCOUNT = os.getenv("STARIA_EMAIL_ACCOUNT", "staria@starmkt.com.br").strip()
-EMAIL_PASSWORD = os.getenv("STARIA_EMAIL_PASSWORD", "").strip().replace(" ", "").replace('"', "").replace("'", "")
+EMAIL_PASSWORD = (
+    os.getenv("STARIA_EMAIL_PASSWORD", "")
+    .strip()
+    .replace(" ", "")
+    .replace('"', "")
+    .replace("'", "")
+)
 
 CURRICULOS_DIR = Path(r"G:\Drives compartilhados\STARMKT\StarIA\curriculos")
-BANCO_TALENTOS_XLSX = Path(r"G:\Drives compartilhados\STARMKT\StarIA\banco_talentos\banco_talentos.xlsx")
+BANCO_TALENTOS_XLSX = Path(
+    r"G:\Drives compartilhados\STARMKT\StarIA\banco_talentos\banco_talentos.xlsx"
+)
 
 ALLOWED_EXTS = {".pdf", ".doc", ".docx", ".txt", ".rtf"}
 
@@ -48,6 +61,7 @@ DEFAULT_ORIGEM = "email"
 # =========================
 # UTILS
 # =========================
+
 
 def decode_mime_words(s: str) -> str:
     if not s:
@@ -102,6 +116,7 @@ def decode_sender(sender_raw: str) -> str:
 # EMAIL BODY
 # =========================
 
+
 def extract_email_body(msg) -> str:
     body = ""
 
@@ -133,6 +148,7 @@ def extract_email_body(msg) -> str:
 # EXTRACT NÍVEL
 # =========================
 
+
 def extract_level(email_body: str) -> str:
     if not email_body:
         return ""
@@ -141,7 +157,7 @@ def extract_level(email_body: str) -> str:
 
     patterns = [
         r"n[íi]vel\s*:\s*(j[uú]nior|pleno|s[êe]nior)",
-        r"senioridade\s*:\s*(j[uú]nior|pleno|s[êe]nior)"
+        r"senioridade\s*:\s*(j[uú]nior|pleno|s[êe]nior)",
     ]
 
     for pattern in patterns:
@@ -163,6 +179,7 @@ def extract_level(email_body: str) -> str:
 # EXTRACT PORTFOLIO
 # =========================
 
+
 def extract_portfolio(email_body: str) -> str:
     if not email_body:
         return ""
@@ -180,20 +197,21 @@ def extract_portfolio(email_body: str) -> str:
 # CONFIG CHECK
 # =========================
 
+
 def validate_config():
     if not EMAIL_ACCOUNT:
         raise RuntimeError("STARIA_EMAIL_ACCOUNT não definido no .env")
 
     if not EMAIL_PASSWORD:
         raise RuntimeError(
-            "STARIA_EMAIL_PASSWORD não definido no .env "
-            f"({BASE_DIR / '.env'})"
+            "STARIA_EMAIL_PASSWORD não definido no .env " f"({BASE_DIR / '.env'})"
         )
 
 
 # =========================
 # CONNECT MAILBOX
 # =========================
+
 
 def connect_mailbox():
     validate_config()
@@ -217,6 +235,7 @@ def connect_mailbox():
 # =========================
 # SAVE ATTACHMENTS
 # =========================
+
 
 def save_attachment(msg):
     saved_files = []
@@ -255,6 +274,7 @@ def save_attachment(msg):
 # =========================
 # TEXT EXTRACTION
 # =========================
+
 
 def extract_text_from_pdf(file_path: Path) -> str:
     try:
@@ -310,6 +330,7 @@ def extract_text_from_file(file_path: Path) -> str:
 # CARGO FALLBACK
 # =========================
 
+
 def guess_job_title_from_text(text: str) -> str:
     """
     Heurística simples para cargo quando a IA não preencher.
@@ -349,6 +370,7 @@ def guess_job_title_from_text(text: str) -> str:
 # AI EXTRACTION
 # =========================
 
+
 def extract_json_block(text: str) -> str:
     if not text:
         return ""
@@ -359,7 +381,7 @@ def extract_json_block(text: str) -> str:
     end = text.rfind("}")
 
     if start >= 0 and end > start:
-        return text[start:end + 1].strip()
+        return text[start : end + 1].strip()
 
     return text
 
@@ -460,6 +482,7 @@ Texto do currículo:
 # EXCEL HELPERS
 # =========================
 
+
 def build_header_map(ws) -> dict:
     return {
         safe_str(cell.value): idx + 1
@@ -482,6 +505,7 @@ def get_next_candidate_id(ws, header_map: dict) -> str:
             max_num = max(max_num, int(m.group(1)))
 
     return f"BT{max_num + 1:04d}"
+
 
 def append_candidate_to_sheet(
     file_path: Path,
@@ -521,7 +545,6 @@ def append_candidate_to_sheet(
 
     candidate_id = get_next_candidate_id(ws, header_map)
 
-
     ws.insert_rows(2, amount=1)
     next_row = 2
 
@@ -551,7 +574,9 @@ def append_candidate_to_sheet(
         ws.cell(row=next_row, column=col, value=sanitize_sheet_value(value))
 
     wb.save(BANCO_TALENTOS_XLSX)
-    print(f"[EMAIL] Planilha atualizada com candidato {candidate_id}: {file_path.name} (linha {next_row})")
+    print(
+        f"[EMAIL] Planilha atualizada com candidato {candidate_id}: {file_path.name} (linha {next_row})"
+    )
     print(f"[EMAIL] Arquivo gravado em: {BANCO_TALENTOS_XLSX}")
 
 
@@ -559,13 +584,123 @@ def append_candidate_to_sheet(
 # EMAIL FILTERS
 # =========================
 
+APPLICATION_KEYWORDS = [
+    "new application",
+    "application received",
+    "candidate applied",
+    "candidatura",
+    "nova candidatura",
+    "inscricao",
+    "inscrição",
+]
+
+RESUME_FILENAME_HINTS = ["cv", "curriculo", "currículo", "resumo", "resume"]
+
+
+def normalize_text(text: str) -> str:
+    if not text:
+        return ""
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return text.lower().strip()
+
+
 def is_bank_talent_subject(subject: str) -> bool:
-    return "banco de talentos" in (subject or "").lower()
+    return "banco de talentos" in normalize_text(subject)
+
+
+def is_linkedin_sender(sender: str) -> bool:
+    return "jobs-listings@linkedin.com" in normalize_text(sender)
+
+
+def has_application_signal(subject: str, body: str) -> bool:
+    text = normalize_text(subject + " " + body)
+    return any(k in text for k in APPLICATION_KEYWORDS)
+
+
+def filename_looks_like_cv(filename: str) -> bool:
+    name = normalize_text(filename)
+
+    if not any(name.endswith(ext) for ext in ALLOWED_EXTS):
+        return False
+
+    return any(hint in name for hint in RESUME_FILENAME_HINTS)
+
+
+def email_has_cv_attachment(msg) -> bool:
+    for part in msg.walk():
+
+        content_disposition = str(part.get("Content-Disposition") or "")
+        if "attachment" not in content_disposition.lower():
+            continue
+
+        filename = part.get_filename()
+
+        if not filename:
+            continue
+
+        filename = decode_mime_words(filename)
+
+        if filename_looks_like_cv(filename):
+            return True
+
+    return False
+
+
+DIRECT_APPLICATION_HINTS = [
+    "vaga",
+    "curriculo",
+    "currículo",
+    "candidatura",
+    "candidate",
+    "application",
+    "resume",
+]
+
+
+def has_direct_application_signal(subject: str, body: str) -> bool:
+    text = normalize_text(subject + " " + body)
+    return any(k in text for k in DIRECT_APPLICATION_HINTS)
+
+
+DIRECT_APPLICATION_HINTS = [
+    "vaga",
+    "curriculo",
+    "currículo",
+    "candidatura",
+    "candidate",
+    "application",
+    "resume",
+]
+
+
+def has_direct_application_signal(subject: str, body: str) -> bool:
+    text = normalize_text(subject + " " + body)
+    return any(k in text for k in DIRECT_APPLICATION_HINTS)
+
+
+
+def should_process_email(msg, subject: str, sender: str, body: str) -> bool:
+
+    legacy_flow = is_bank_talent_subject(subject)
+
+    linkedin_flow = (
+        is_linkedin_sender(sender)
+        and has_application_signal(subject, body)
+        and email_has_cv_attachment(msg)
+    )
+
+    direct_cv_flow = email_has_cv_attachment(msg) and has_direct_application_signal(
+        subject, body
+    )
+
+    return legacy_flow or linkedin_flow or direct_cv_flow
 
 
 # =========================
 # PROCESS INBOX
 # =========================
+
 
 def process_inbox():
     mail = connect_mailbox()
@@ -598,8 +733,11 @@ def process_inbox():
         print("[EMAIL] Assunto:", subject)
         print("[EMAIL] De:", sender)
 
-        if not is_bank_talent_subject(subject):
-            print("[EMAIL] Ignorado (assunto não relacionado)")
+        body = extract_email_body(msg)
+
+        if not should_process_email(msg, subject, sender, body):
+
+            print("[EMAIL] Ignorado por não atender critérios de currículo")
             continue
 
         body = extract_email_body(msg)
@@ -607,7 +745,9 @@ def process_inbox():
         portfolio = extract_portfolio(body)
 
         print("[EMAIL] Nível detectado:", level if level else "não informado")
-        print("[EMAIL] Portfólio detectado:", portfolio if portfolio else "não informado")
+        print(
+            "[EMAIL] Portfólio detectado:", portfolio if portfolio else "não informado"
+        )
 
         saved = save_attachment(msg)
 
@@ -624,25 +764,32 @@ def process_inbox():
             print("         Nome:", extracted.get("nome_completo") or "(vazio)")
             print("         Idade:", extracted.get("idade") or "(vazio)")
             print("         Localização:", extracted.get("localizacao") or "(vazio)")
-            print("         Cargo pretendido:", extracted.get("cargo_pretendido") or "(vazio)")
+            print(
+                "         Cargo pretendido:",
+                extracted.get("cargo_pretendido") or "(vazio)",
+            )
             print("         Habilidades:", extracted.get("habilidades") or "(vazio)")
             print("         Formações:", extracted.get("formacoes") or "(vazio)")
             print("         Email:", extracted.get("email") or "(vazio)")
             print("         Telefone:", extracted.get("telefone") or "(vazio)")
 
-            has_any_data = any([
-                extracted.get("nome_completo"),
-                extracted.get("idade"),
-                extracted.get("localizacao"),
-                extracted.get("cargo_pretendido"),
-                extracted.get("habilidades"),
-                extracted.get("formacoes"),
-                extracted.get("email"),
-                extracted.get("telefone"),
-            ])
+            has_any_data = any(
+                [
+                    extracted.get("nome_completo"),
+                    extracted.get("idade"),
+                    extracted.get("localizacao"),
+                    extracted.get("cargo_pretendido"),
+                    extracted.get("habilidades"),
+                    extracted.get("formacoes"),
+                    extracted.get("email"),
+                    extracted.get("telefone"),
+                ]
+            )
 
             if not has_any_data:
-                print(f"[EMAIL] Extração vazia para {file_path.name}. Linha NÃO será gravada na planilha.")
+                print(
+                    f"[EMAIL] Extração vazia para {file_path.name}. Linha NÃO será gravada na planilha."
+                )
                 continue
 
             append_candidate_to_sheet(
