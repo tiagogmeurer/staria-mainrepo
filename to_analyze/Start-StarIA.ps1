@@ -28,14 +28,14 @@ if (-not (Test-Path $env:STARIA_PROFILES_DIR)) {
 # ==============================
 # 2) Verificar Ollama
 # ==============================
-Write-Host "🔍 Verificando Ollama..."
+Write-Host "🔍 Verificando Star-llama..."
 
 try {
     $ollamaCheck = Invoke-WebRequest -Uri "http://127.0.0.1:11434" -UseBasicParsing -TimeoutSec 2
-    Write-Host "✅ Ollama já está rodando"
+    Write-Host "✅ Star-llama já está rodando"
 }
 catch {
-    Write-Host "⚠️ Ollama não está rodando. Iniciando..."
+    Write-Host "⚠️ Star-llama não está rodando. Iniciando..."
     Start-Process "ollama"
     Start-Sleep -Seconds 5
 }
