@@ -27,6 +27,11 @@ from docx import Document
 from datasets.professional_profiles.matching_engine import score_candidate_against_profiles
 from rh.talent_bank_workbook import append_candidate_record, ensure_bank_workbook_structure
 
+import subprocess
+import tempfile
+
+
+
 # =========================
 # LOAD .ENV DO BACKEND
 # =========================
@@ -134,6 +139,33 @@ def decode_sender(sender_raw: str) -> str:
         return f"{name} <{addr}>"
     return addr or name or ""
 
+EMAIL_REGEX = r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
+PHONE_REGEX = r"(\+55\s?)?(\(?\d{2}\)?\s?)?\d{4,5}[-.\s]?\d{4}"
+
+PORTFOLIO_PATTERNS = [
+    r"https?://(?:www\.)?behance\.net/\S+",
+    r"https?://(?:www\.)?dribbble\.com/\S+",
+    r"https?://(?:www\.)?github\.com/\S+",
+    r"https?://(?:www\.)?linkedin\.com/\S+",
+]
+
+
+def extract_email_regex(text: str) -> str:
+    match = re.search(EMAIL_REGEX, text or "")
+    return match.group(0) if match else ""
+
+
+def extract_phone_regex(text: str) -> str:
+    match = re.search(PHONE_REGEX, text or "")
+    return match.group(0) if match else ""
+
+
+def extract_portfolio_regex(text: str) -> str:
+    for pattern in PORTFOLIO_PATTERNS:
+        match = re.search(pattern, text or "", flags=re.IGNORECASE)
+        if match:
+            return match.group(0)
+    return ""
 
 # =========================
 # EMAIL BODY
@@ -288,7 +320,14 @@ def save_attachment(msg):
         with open(filepath, "wb") as f:
             f.write(part.get_payload(decode=True))
 
-        print("[EMAIL] Currículo salvo:", filepath)
+        original_filepath = filepath
+        filepath = convert_to_pdf_if_possible(filepath)
+
+        if filepath != original_filepath:
+            print("[EMAIL] Currículo convertido para PDF:", filepath)
+        else:
+            print("[EMAIL] Currículo salvo:", filepath)
+
         saved_files.append(filepath)
 
     return saved_files
@@ -409,29 +448,33 @@ def extract_json_block(text: str) -> str:
     return text
 
 
-def extract_candidate_data_with_ai(file_path: Path) -> tuple[dict, str]:
+def extract_candidate_data_with_ai(file_path: Path) -> dict:
     text = extract_text_from_file(file_path)
+
     print(f"[EMAIL] Texto extraído de {file_path.name}: {len(text)} caracteres")
 
-    empty = {
-        "nome_completo": "",
-        "idade": "",
-        "localizacao": "",
-        "cargo_pretendido": "",
-        "habilidades": "",
-        "formacoes": "",
-        "email": "",
-        "telefone": "",
-    }
-
     if not text.strip():
-        print(f"[EMAIL] Currículo sem texto extraível: {file_path.name}")
-        return empty, text
+        return {
+            "nome_completo": "",
+            "idade": "",
+            "localizacao": "",
+            "cargo_pretendido": "",
+            "habilidades": "",
+            "formacoes": "",
+            "email": "",
+            "telefone": "",
+            "portfolio": "",
+        }
+
+    # 🔥 EXTRAÇÃO REGEX PRIMEIRO
+    email_regex = extract_email_regex(text)
+    phone_regex = extract_phone_regex(text)
+    portfolio_regex = extract_portfolio_regex(text)
 
     prompt = f"""
 Extraia do currículo as informações abaixo e devolva APENAS JSON válido.
 
-Campos obrigatórios do JSON:
+Campos:
 {{
   "nome_completo": "",
   "idade": "",
@@ -440,66 +483,51 @@ Campos obrigatórios do JSON:
   "habilidades": "",
   "formacoes": "",
   "email": "",
-  "telefone": ""
+  "telefone": "",
+  "portfolio": ""
 }}
 
 Regras:
-- Não invente informações.
-- Se não encontrar um campo, deixe "".
-- Use para "cargo_pretendido" o cargo desejado, headline profissional, título principal do currículo ou área/cargo mais provável explicitamente indicada no topo do documento.
-- "habilidades" deve ser uma string curta, com itens separados por "; ".
-- "formacoes" deve ser uma string curta, com itens separados por "; ".
-- Responda somente com JSON puro, sem markdown, sem explicação.
+- NÃO invente dados
+- Use apenas o currículo
+- Se não encontrar, deixe "N/I"
 
-Nome do arquivo: {file_path.name}
-
-Texto do currículo:
+Currículo:
 {text[:15000]}
-""".strip()
+"""
 
     try:
-        payload = {
-            "question": prompt,
-            "use_rag": False,
-            "model": STARIA_OLLAMA_MODEL,
-        }
-
         resp = requests.post(
             f"{STARIA_API_BASE}/ask",
-            json=payload,
+            json={
+                "question": prompt,
+                "use_rag": False,
+                "model": STARIA_OLLAMA_MODEL,
+            },
             timeout=180,
         )
+
         resp.raise_for_status()
-        data = resp.json()
-        answer = data.get("answer", "").strip()
+        answer = resp.json().get("answer", "")
 
-        json_text = extract_json_block(answer)
-        parsed = json.loads(json_text)
-
-        extracted = {
-            "nome_completo": safe_str(parsed.get("nome_completo")),
-            "idade": safe_str(parsed.get("idade")),
-            "localizacao": safe_str(parsed.get("localizacao")),
-            "cargo_pretendido": safe_str(parsed.get("cargo_pretendido")),
-            "habilidades": safe_str(parsed.get("habilidades")),
-            "formacoes": safe_str(parsed.get("formacoes")),
-            "email": safe_str(parsed.get("email")),
-            "telefone": safe_str(parsed.get("telefone")),
-        }
-
-        if not extracted["cargo_pretendido"]:
-            extracted["cargo_pretendido"] = guess_job_title_from_text(text)
-
-        return extracted, text
+        parsed = json.loads(extract_json_block(answer))
 
     except Exception as e:
-        print(f"[EMAIL] Falha na extração IA de {file_path.name}: {e}")
+        print(f"[EMAIL] Falha IA: {e}")
+        parsed = {}
 
-        fallback = empty.copy()
-        fallback["cargo_pretendido"] = guess_job_title_from_text(text)
-
-        return fallback, text
-
+    # 🔥 MERGE INTELIGENTE (IA + REGEX)
+    return {
+        "nome_completo": safe_str(parsed.get("nome_completo")),
+        "idade": safe_str(parsed.get("idade")),
+        "localizacao": safe_str(parsed.get("localizacao")),
+        "cargo_pretendido": safe_str(parsed.get("cargo_pretendido")),
+        "habilidades": safe_str(parsed.get("habilidades")),
+        "formacoes": safe_str(parsed.get("formacoes")),
+        "email": safe_str(parsed.get("email") or email_regex),
+        "telefone": safe_str(parsed.get("telefone") or phone_regex),
+        "portfolio": safe_str(parsed.get("portfolio") or portfolio_regex),
+    }
 
 # =========================
 # EXCEL HELPERS
@@ -580,7 +608,7 @@ def append_candidate_to_sheet(
         "Localização": extracted.get("localizacao", ""),
         "Cargo pretendido": requested_role,
         "Nível": level or "",
-        "Portfólio": final_portfolio,
+        "Portfólio": extracted.get("portfolio") or final_portfolio or str(file_path),
         "Habilidades": extracted.get("habilidades", ""),
         "Formações": extracted.get("formacoes", ""),
         "Email": extracted.get("email", ""),
@@ -781,6 +809,21 @@ def process_inbox():
     mail_ids = messages[0].split()
     print("[EMAIL] Emails novos encontrados:", len(mail_ids))
 
+
+
+
+
+
+
+    mail_ids = mail_ids[:5]
+    print("[EMAIL] Rodando em modo teste. Processando apenas:", len(mail_ids))
+
+
+
+
+
+
+
     for mail_id in mail_ids:
         status, msg_data = mail.fetch(mail_id, "(RFC822)")
 
@@ -833,7 +876,7 @@ def process_inbox():
         print("[EMAIL] Total de currículos salvos:", len(saved))
 
         for file_path in saved:
-            extracted, raw_text = extract_candidate_data_with_ai(file_path)
+            extracted = extract_candidate_data_with_ai(file_path)
 
             print("[EMAIL] Dados extraídos:")
             print("         Nome:", extracted.get("nome_completo") or "(vazio)")
@@ -875,6 +918,43 @@ def process_inbox():
                 extracted=extracted,
                 vacancy_title=vacancy_title,
             )
+
+def convert_to_pdf_if_possible(file_path: Path) -> Path:
+    ext = file_path.suffix.lower()
+
+    if ext == ".pdf":
+        return file_path
+
+    if ext not in {".doc", ".docx"}:
+        return file_path
+
+    try:
+        output_dir = file_path.parent
+        subprocess.run(
+            [
+                "soffice",
+                "--headless",
+                "--convert-to",
+                "pdf",
+                str(file_path),
+                "--outdir",
+                str(output_dir),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        pdf_path = file_path.with_suffix(".pdf")
+
+        if pdf_path.exists():
+            print(f"[EMAIL] Convertido para PDF: {pdf_path.name}")
+            return pdf_path
+
+    except Exception as e:
+        print(f"[EMAIL] Falha ao converter PDF: {file_path.name} | {e}")
+
+    return file_path            
 
 
 if __name__ == "__main__":
