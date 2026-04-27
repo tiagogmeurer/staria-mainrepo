@@ -811,19 +811,6 @@ def process_inbox():
 
 
 
-
-
-
-
-    mail_ids = mail_ids[:5]
-    print("[EMAIL] Rodando em modo teste. Processando apenas:", len(mail_ids))
-
-
-
-
-
-
-
     for mail_id in mail_ids:
         status, msg_data = mail.fetch(mail_id, "(RFC822)")
 
