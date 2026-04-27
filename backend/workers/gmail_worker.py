@@ -556,7 +556,7 @@ def append_candidate_to_sheet(
 
     if nota < 50:
         print(
-            f"[EMAIL] Candidato descartado por nota abaixo da corte: "
+            f"[EMAIL] Candidato descartado por nota abaixo de corte: "
             f"{extracted.get('nome_completo') or file_path.name} | Nota: {nota}"
         )
         return
