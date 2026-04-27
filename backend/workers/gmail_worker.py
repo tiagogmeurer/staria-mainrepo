@@ -4,13 +4,16 @@ from email.header import decode_header
 from email.utils import parseaddr
 
 import os
+import sys
 from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+sys.path.append(str(BASE_DIR))
+
 import datetime
 import re
 import json
 import unicodedata
-
-
 
 
 from typing import Any
@@ -20,6 +23,9 @@ from dotenv import load_dotenv
 from openpyxl import load_workbook
 from pypdf import PdfReader
 from docx import Document
+
+from datasets.professional_profiles.matching_engine import score_candidate_against_profiles
+from rh.talent_bank_workbook import append_candidate_record, ensure_bank_workbook_structure
 
 # =========================
 # LOAD .ENV DO BACKEND
@@ -51,11 +57,20 @@ BANCO_TALENTOS_XLSX = Path(
 
 ALLOWED_EXTS = {".pdf", ".doc", ".docx", ".txt", ".rtf"}
 
-STARIA_API_BASE = os.getenv("STARIA_API_BASE", "http://127.0.0.1:8000").strip()
+STARIA_API_BASE = os.getenv("STARIA_API_BASE", "http://127.0.0.1:8088").strip()
 STARIA_OLLAMA_MODEL = os.getenv("STAR_OLLAMA_MODEL", "star-llama").strip()
 
 DEFAULT_STATUS = "Banco de talentos"
 DEFAULT_ORIGEM = "email"
+
+
+CANDIDATOS_REFINADOS_XLSX = Path(
+    os.getenv(
+        "CANDIDATOS_REFINADOS_XLSX",
+        r"G:\Drives compartilhados\STARMKT\StarIA\banco_talentos\candidatos_refinados.xlsx",
+    )
+)
+
 
 
 # =========================
@@ -100,8 +115,16 @@ def sanitize_sheet_value(value: Any) -> str:
 
 def ensure_paths():
     CURRICULOS_DIR.mkdir(parents=True, exist_ok=True)
+
     if not BANCO_TALENTOS_XLSX.exists():
         raise RuntimeError(f"Planilha não encontrada: {BANCO_TALENTOS_XLSX}")
+
+    ensure_bank_workbook_structure(
+        banco_path=BANCO_TALENTOS_XLSX,
+        refined_path=CANDIDATOS_REFINADOS_XLSX,
+        create_backup=False,
+        redistribute_existing=False,
+    )
 
 
 def decode_sender(sender_raw: str) -> str:
@@ -513,49 +536,51 @@ def append_candidate_to_sheet(
     level: str,
     portfolio: str,
     extracted: dict,
+    vacancy_title: str = "",
 ):
-    wb = load_workbook(BANCO_TALENTOS_XLSX)
-    ws = wb.active
-    header_map = build_header_map(ws)
+    curriculum_text = extract_text_from_file(file_path)
 
-    required_headers = [
-        "ID",
-        "Nome completo",
-        "Idade",
-        "Localização",
-        "Cargo pretendido",
-        "Nível",
-        "Portfólio",
-        "Habilidades",
-        "Formações",
-        "Email",
-        "Telefone",
-        "Caminho do currículo",
-        "Nome do arquivo",
-        "Data de entrada",
-        "Origem",
-        "Remetente do email",
-        "Status",
-        "Observações",
-    ]
+    requested_role = vacancy_title or extracted.get("cargo_pretendido", "")
 
-    missing = [h for h in required_headers if h not in header_map]
-    if missing:
-        raise RuntimeError(f"Planilha sem colunas esperadas: {missing}")
+    match_result = score_candidate_against_profiles(
+        candidate=extracted,
+        curriculum_text=curriculum_text,
+        requested_role=requested_role,
+        extra_query=vacancy_title,
+    )
 
-    candidate_id = get_next_candidate_id(ws, header_map)
+    best = match_result.get("best") or {}
+    top_matches = match_result.get("top_matches") or []
 
-    ws.insert_rows(2, amount=1)
-    next_row = 2
+    nota = int(match_result.get("nota", 0) or 0)
+
+    if nota < 50:
+        print(
+            f"[EMAIL] Candidato descartado por nota abaixo da corte: "
+            f"{extracted.get('nome_completo') or file_path.name} | Nota: {nota}"
+        )
+        return
+
+    top_matches_text = "; ".join(
+        [
+            f"{m.get('title', '')} ({m.get('nota', m.get('score_pct', 0))})"
+            for m in top_matches
+            if m.get("title")
+        ]
+    )
+
+    final_portfolio = portfolio or ""
+    if not final_portfolio:
+        final_portfolio = str(file_path)
 
     values = {
-        "ID": candidate_id,
+        "Nota": nota,
         "Nome completo": extracted.get("nome_completo", ""),
         "Idade": extracted.get("idade", ""),
         "Localização": extracted.get("localizacao", ""),
-        "Cargo pretendido": extracted.get("cargo_pretendido", ""),
+        "Cargo pretendido": requested_role,
         "Nível": level or "",
-        "Portfólio": portfolio or "",
+        "Portfólio": final_portfolio,
         "Habilidades": extracted.get("habilidades", ""),
         "Formações": extracted.get("formacoes", ""),
         "Email": extracted.get("email", ""),
@@ -567,22 +592,63 @@ def append_candidate_to_sheet(
         "Remetente do email": sender,
         "Status": DEFAULT_STATUS,
         "Observações": "",
+        "Role ID sugerido": best.get("role_id", ""),
+        "Título normalizado": best.get("title", ""),
+        "Top 3 roles aderentes": top_matches_text,
+        "Resumo de aderência": match_result.get("summary", ""),
+        "Flags de risco": "; ".join(best.get("gaps", [])[:6]),
     }
 
-    for header, value in values.items():
-        col = header_map[header]
-        ws.cell(row=next_row, column=col, value=sanitize_sheet_value(value))
-
-    wb.save(BANCO_TALENTOS_XLSX)
-    print(
-        f"[EMAIL] Planilha atualizada com candidato {candidate_id}: {file_path.name} (linha {next_row})"
+    candidate_id = append_candidate_record(
+        values=values,
+        banco_path=BANCO_TALENTOS_XLSX,
+        refined_path=CANDIDATOS_REFINADOS_XLSX,
     )
-    print(f"[EMAIL] Arquivo gravado em: {BANCO_TALENTOS_XLSX}")
+
+    if candidate_id == "DUPLICADO":
+        print(
+            f"[EMAIL] Candidato duplicado ignorado: "
+            f"{values.get('Nome completo') or values.get('Email') or file_path.name}"
+        )
+        return
+
+    print(
+        f"[EMAIL] Planilha atualizada com candidato {candidate_id}: "
+        f"{file_path.name} | Vaga: {requested_role} | "
+        f"Nota: {match_result.get('nota', 0)} | Perfil: {best.get('title', '')}"
+    )
 
 
 # =========================
 # EMAIL FILTERS
 # =========================
+
+
+def extract_job_title_from_subject(subject: str) -> str:
+    """
+    Exemplo:
+    New application: Diretor(a) de Arte Sênior — Criação (...) from Nome
+    """
+    if not subject:
+        return ""
+
+    text = decode_mime_words(subject)
+
+    patterns = [
+        r"new application:\s*(.+?)\s+from\s+.+$",
+        r"application received:\s*(.+?)\s+from\s+.+$",
+        r"candidate applied:\s*(.+?)\s+from\s+.+$",
+        r"candidatura:\s*(.+?)\s+de\s+.+$",
+        r"nova candidatura:\s*(.+?)\s+de\s+.+$",
+    ]
+
+    for pattern in patterns:
+        m = re.search(pattern, text, flags=re.IGNORECASE)
+        if m:
+            return normalize_spaces(m.group(1))
+
+    return ""
+
 
 APPLICATION_KEYWORDS = [
     "new application",
@@ -749,6 +815,15 @@ def process_inbox():
             "[EMAIL] Portfólio detectado:", portfolio if portfolio else "não informado"
         )
 
+
+        vacancy_title = extract_job_title_from_subject(subject)
+
+        print(
+            "[EMAIL] Vaga detectada:",
+            vacancy_title if vacancy_title else "não informada",
+        )
+
+
         saved = save_attachment(msg)
 
         if not saved:
@@ -798,6 +873,7 @@ def process_inbox():
                 level=level,
                 portfolio=portfolio,
                 extracted=extracted,
+                vacancy_title=vacancy_title,
             )
 
 

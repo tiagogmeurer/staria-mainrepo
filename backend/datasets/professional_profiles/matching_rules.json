@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "updated_at": "2026-04-24",
+  "default_weights": {
+    "role_title": 20,
+    "profile_required_skills": 20,
+    "priority_specs": 40,
+    "seniority": 10,
+    "location": 10
+  },
+  "global_terms": {
+    "varejo": ["varejo", "retail", "atacarejo", "supermercado", "atacado", "assaí", "assai", "carrefour", "extra", "pão de açúcar", "pao de acucar", "mercado", "loja alimentar"],
+    "farma": ["farma", "farmácia", "farmacia", "drogaria", "drogarias", "pharma", "saúde", "saude", "bem estar", "bem-estar", "categoria regulada", "categorias reguladas"],
+    "ia_comunicacao": ["ia", "inteligência artificial", "inteligencia artificial", "chatgpt", "midjourney", "firefly", "adobe firefly", "runway", "sora", "kling", "kling 3.0", "higgsfield", "heygen", "stable diffusion", "comfyui", "comfy ui", "leonardo ai", "flux", "generative ai", "genai"],
+    "adobe": ["photoshop", "illustrator", "indesign", "after effects", "premiere", "adobe", "pacote adobe", "creative suite"],
+    "performance_ads": ["analytics", "google analytics", "ga4", "google ads", "meta ads", "facebook ads", "instagram ads", "tiktok ads", "dashboard", "looker", "data studio", "power bi"],
+    "marketplace": ["marketplace", "ecommerce", "e-commerce", "digital commerce", "performance digital", "programática", "programatica", "varejo digital"],
+    "alto_volume": ["alto volume", "alta cadência", "alta cadencia", "volume alto", "escala", "múltiplas entregas", "multiplas entregas", "velocidade"],
+    "stakeholder": ["stakeholder", "stakeholder engagement", "comunicação corporativa", "comunicacao corporativa", "cliente interno", "clientes internos", "interface", "relacionamento", "briefing"],
+    "encarte": ["encarte", "tablóide", "tabloide", "ofertas", "material promocional", "varejo promocional", "diagramação", "diagramacao", "indesign"]
+  },
+  "role_rules": {
+    "estrategista_senior_planejamento": [
+      { "label": "Experiência em farma", "terms_key": "farma", "points": 10 },
+      { "label": "Experiência em varejo", "terms_key": "varejo", "points": 10 },
+      { "label": "IA aplicada a marca/comunicação", "terms_key": "ia_comunicacao", "points": 20 }
+    ],
+    "coordenador_conteudo": [
+      { "label": "Experiência em farma", "terms_key": "farma", "points": 10 },
+      { "label": "Experiência em varejo", "terms_key": "varejo", "points": 10 },
+      { "label": "IA aplicada a marca/comunicação", "terms_key": "ia_comunicacao", "points": 20 }
+    ],
+    "performance_growth_planejamento": [
+      { "label": "Analytics, Google Ads, Meta Ads ou TikTok Ads", "terms_key": "performance_ads", "points": 20 },
+      { "label": "Experiência em farma", "terms_key": "farma", "points": 8 },
+      { "label": "Experiência em varejo", "terms_key": "varejo", "points": 8 },
+      { "label": "IA aplicada a marca/comunicação", "terms_key": "ia_comunicacao", "points": 14 }
+    ],
+    "diretor_arte_senior_campanhas": [
+      { "label": "Experiência em farma", "terms_key": "farma", "points": 8 },
+      { "label": "Experiência em varejo", "terms_key": "varejo", "points": 8 },
+      { "label": "Domínio em Adobe/Photoshop/Illustrator", "terms_key": "adobe", "points": 12 },
+      { "label": "IA aplicada a criação e comunicação", "terms_key": "ia_comunicacao", "points": 12 }
+    ],
+    "diretor_arte_senior_branding_produto": [
+      { "label": "Experiência em farma", "terms_key": "farma", "points": 10 },
+      { "label": "Experiência em varejo", "terms_key": "varejo", "points": 10 },
+      { "label": "IA aplicada a marca/comunicação", "terms_key": "ia_comunicacao", "points": 20 }
+    ],
+    "diretor_arte_senior_digital": [
+      { "label": "Performance/marketplace digital no varejo", "terms_key": "marketplace", "points": 16 },
+      { "label": "Materiais com inteligência artificial", "terms_key": "ia_comunicacao", "points": 14 },
+      { "label": "Ambiente de alto volume", "terms_key": "alto_volume", "points": 10 },
+      { "label": "Experiência em varejo", "terms_key": "varejo", "points": 8 }
+    ],
+    "motion_designer": [
+      { "label": "IA para motion, Kling ou Higgsfield", "terms": ["kling", "kling 3.0", "higgsfield", "ia", "inteligência artificial", "inteligencia artificial"], "points": 18 },
+      { "label": "Animações, logos animados ou interfaces dinâmicas", "terms": ["animação", "animacao", "logo animado", "logos animados", "ui", "interface", "interfaces dinâmicas", "interfaces dinamicas", "motion", "reels"], "points": 14 },
+      { "label": "After Effects/Premiere", "terms": ["after effects", "premiere"], "points": 8 }
+    ],
+    "redator_digital": [
+      { "label": "Categorias reguladas", "terms": ["categoria regulada", "categorias reguladas", "saúde", "saude", "bem-estar", "bem estar"], "points": 20 },
+      { "label": "Varejo farma", "terms_key": "farma", "points": 12 },
+      { "label": "Varejo", "terms_key": "varejo", "points": 8 }
+    ],
+    "atendimento_senior": [
+      { "label": "Comunicação corporativa / stakeholder engagement", "terms_key": "stakeholder", "points": 18 },
+      { "label": "Atendimento a varejo alimentar", "terms_key": "varejo", "points": 12 },
+      { "label": "Atendimento a farma", "terms_key": "farma", "points": 12 }
+    ],
+    "diagramador_ofertas": [
+      { "label": "Encarte, tabloide ou ofertas", "terms_key": "encarte", "points": 18 },
+      { "label": "Experiência em varejo", "terms_key": "varejo", "points": 12 },
+      { "label": "Experiência em farma", "terms_key": "farma", "points": 12 },
+      { "label": "InDesign/Illustrator", "terms": ["indesign", "illustrator"], "points": 8 }
+    ]
+  }
+}
