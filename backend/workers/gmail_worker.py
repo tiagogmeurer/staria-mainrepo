@@ -124,13 +124,9 @@ def ensure_paths():
     if not BANCO_TALENTOS_XLSX.exists():
         raise RuntimeError(f"Planilha não encontrada: {BANCO_TALENTOS_XLSX}")
 
-    ensure_bank_workbook_structure(
-        banco_path=BANCO_TALENTOS_XLSX,
-        refined_path=CANDIDATOS_REFINADOS_XLSX,
-        create_backup=False,
-        redistribute_existing=False,
-    )
-
+    # Não reestruturar a planilha a cada execução do worker.
+    # A estrutura/redistribuição deve ser feita manualmente com:
+    # python -c "from rh.talent_bank_workbook import ensure_bank_workbook_structure; print(ensure_bank_workbook_structure(redistribute_existing=True))"
 
 def decode_sender(sender_raw: str) -> str:
     name, addr = parseaddr(sender_raw or "")
@@ -568,7 +564,9 @@ def append_candidate_to_sheet(
 ):
     curriculum_text = extract_text_from_file(file_path)
 
-    requested_role = vacancy_title or extracted.get("cargo_pretendido", "")
+    requested_role = vacancy_title if vacancy_title else (
+    extracted.get("cargo_pretendido") or guess_job_title_from_text(curriculum_text)
+)
 
     match_result = score_candidate_against_profiles(
         candidate=extracted,
@@ -796,6 +794,9 @@ def should_process_email(msg, subject: str, sender: str, body: str) -> bool:
 # =========================
 
 
+
+
+
 def process_inbox():
     mail = connect_mailbox()
     mail.select("inbox")
@@ -808,8 +809,6 @@ def process_inbox():
 
     mail_ids = messages[0].split()
     print("[EMAIL] Emails novos encontrados:", len(mail_ids))
-
-
 
     for mail_id in mail_ids:
         status, msg_data = mail.fetch(mail_id, "(RFC822)")
@@ -832,19 +831,14 @@ def process_inbox():
         body = extract_email_body(msg)
 
         if not should_process_email(msg, subject, sender, body):
-
             print("[EMAIL] Ignorado por não atender critérios de currículo")
             continue
 
-        body = extract_email_body(msg)
         level = extract_level(body)
         portfolio = extract_portfolio(body)
 
         print("[EMAIL] Nível detectado:", level if level else "não informado")
-        print(
-            "[EMAIL] Portfólio detectado:", portfolio if portfolio else "não informado"
-        )
-
+        print("[EMAIL] Portfólio detectado:", portfolio if portfolio else "não informado")
 
         vacancy_title = extract_job_title_from_subject(subject)
 
@@ -852,7 +846,6 @@ def process_inbox():
             "[EMAIL] Vaga detectada:",
             vacancy_title if vacancy_title else "não informada",
         )
-
 
         saved = save_attachment(msg)
 
@@ -863,16 +856,38 @@ def process_inbox():
         print("[EMAIL] Total de currículos salvos:", len(saved))
 
         for file_path in saved:
+
+            # 🔥 TEXTO DO CURRÍCULO
+            curriculum_text = extract_text_from_file(file_path)
+
             extracted = extract_candidate_data_with_ai(file_path)
+
+            # 🔥 FALLBACKS IMPORTANTES
+            if not extracted.get("email"):
+                extracted["email"] = extract_email_regex(curriculum_text)
+
+            if not extracted.get("telefone"):
+                extracted["telefone"] = extract_phone_regex(curriculum_text)
+
+            if not extracted.get("portfolio"):
+                extracted["portfolio"] = extract_portfolio_regex(curriculum_text)
+
+            if not extracted.get("nome_completo"):
+                lines = curriculum_text.splitlines()
+                for line in lines[:10]:
+                    if len(line.strip().split()) >= 2:
+                        extracted["nome_completo"] = line.strip()
+                        break
+
+            # 🔥 FORÇA CARGO MELHOR
+            if not extracted.get("cargo_pretendido"):
+                extracted["cargo_pretendido"] = guess_job_title_from_text(curriculum_text)
 
             print("[EMAIL] Dados extraídos:")
             print("         Nome:", extracted.get("nome_completo") or "(vazio)")
             print("         Idade:", extracted.get("idade") or "(vazio)")
             print("         Localização:", extracted.get("localizacao") or "(vazio)")
-            print(
-                "         Cargo pretendido:",
-                extracted.get("cargo_pretendido") or "(vazio)",
-            )
+            print("         Cargo pretendido:", extracted.get("cargo_pretendido") or "(vazio)")
             print("         Habilidades:", extracted.get("habilidades") or "(vazio)")
             print("         Formações:", extracted.get("formacoes") or "(vazio)")
             print("         Email:", extracted.get("email") or "(vazio)")
@@ -905,6 +920,8 @@ def process_inbox():
                 extracted=extracted,
                 vacancy_title=vacancy_title,
             )
+
+
 
 def convert_to_pdf_if_possible(file_path: Path) -> Path:
     ext = file_path.suffix.lower()

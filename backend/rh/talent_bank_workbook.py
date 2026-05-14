@@ -55,7 +55,7 @@ FALLBACK_REFINED_HEADERS = [
     "Nível",
     "Portfólio",
     "Habilidades",
-    "Formações",
+    "Formações", 
     "Email",
     "Telefone",
 ]
@@ -418,7 +418,7 @@ def choose_sheet_name(sheet_names: list[str], row: dict[str, Any]) -> str:
         "diretor_arte_senior_branding_produto": "DIRETOR DE ARTE BRANDING",
         "diretor_arte_senior_digital": "DIRETOR DE ARTE DIGITAL",
         "diretor_arte_senior_campanhas": "DIRETOR DE ARTE INSTITUCIONAL",
-        "diagramador_ofertas": "DIAGRAMADOR ",
+        "diagramador_ofertas": "DIAGRAMADOR",
         "performance_growth_planejamento": "PLANEJAMENTO PERFORMANCE & GROW",
         "estrategista_senior_planejamento": "PLANEJAMENTO ESTRATÉGICO",
         "motion_designer": "MOTION DESIGNER",
@@ -590,12 +590,13 @@ def append_candidate_record(
     banco_path: Path = DEFAULT_BANCO_TALENTOS_XLSX,
     refined_path: Path = DEFAULT_REFINED_XLSX,
 ) -> str:
-    ensure_bank_workbook_structure(
-        banco_path=banco_path,
-        refined_path=refined_path,
-        create_backup=False,
-        redistribute_existing=False,
-    )
+    if not Path(banco_path).exists():
+        ensure_bank_workbook_structure(
+            banco_path=banco_path,
+            refined_path=refined_path,
+            create_backup=False,
+            redistribute_existing=True,
+        )
 
     wb = load_workbook(banco_path)
     all_existing_rows = extract_rows_from_workbook(wb)
