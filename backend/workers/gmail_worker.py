@@ -1,42 +1,46 @@
-import imaplib
+from __future__ import annotations
+
+import datetime
 import email
+import hashlib
+import imaplib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import unicodedata
 from email.header import decode_header
 from email.utils import parseaddr
-
-import os
-import sys
 from pathlib import Path
+from typing import Any
+
+import requests
+from docx import Document
+from dotenv import load_dotenv
+from openpyxl import load_workbook
+from pypdf import PdfReader
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(BASE_DIR))
 
-import datetime
-import re
-import json
-import unicodedata
-
-
-from typing import Any
-
-import requests
-from dotenv import load_dotenv
-from openpyxl import load_workbook
-from pypdf import PdfReader
-from docx import Document
-
 from datasets.professional_profiles.matching_engine import score_candidate_against_profiles
-from rh.talent_bank_workbook import append_candidate_record, ensure_bank_workbook_structure
-
-import subprocess
-import tempfile
-
+from rh.talent_bank_workbook import (
+    CANONICAL_SHEETS,
+    append_candidate_record,
+    backup_workbook,
+    build_bank_headers,
+    ensure_bank_workbook_structure,
+    normalize_role_to_sheet_name,
+    sheet_display_title,
+)
 
 
 # =========================
 # LOAD .ENV DO BACKEND
 # =========================
 
-BASE_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(BASE_DIR / ".env", override=True)
 
 
@@ -55,10 +59,33 @@ EMAIL_PASSWORD = (
     .replace("'", "")
 )
 
-CURRICULOS_DIR = Path(r"G:\Drives compartilhados\STARMKT\StarIA\curriculos")
-BANCO_TALENTOS_XLSX = Path(
-    r"G:\Drives compartilhados\STARMKT\StarIA\banco_talentos\banco_talentos.xlsx"
+STARIA_ROOT = Path(
+    os.getenv("STARIA_DRIVE_ROOT", r"G:\Drives compartilhados\STARMKT\StarIA")
 )
+
+CURRICULOS_DIR = Path(
+    os.getenv(
+        "STARIA_CURRICULOS_DIR",
+        str(STARIA_ROOT / "banco_talentos" / "curriculos"),
+    )
+)
+
+BANCO_TALENTOS_XLSX = Path(
+    os.getenv(
+        "STARIA_TALENTS_XLSX",
+        str(STARIA_ROOT / "banco_talentos" / "banco_talentos.xlsx"),
+    )
+)
+
+CANDIDATOS_REFINADOS_XLSX = Path(
+    os.getenv(
+        "CANDIDATOS_REFINADOS_XLSX",
+        str(STARIA_ROOT / "banco_talentos" / "candidatos_refinados.xlsx"),
+    )
+)
+
+REJECTED_DIR = CURRICULOS_DIR / "_rejeitados_nota_menor_40"
+INDEX_PATH = CURRICULOS_DIR / "_curriculos_index.json"
 
 ALLOWED_EXTS = {".pdf", ".doc", ".docx", ".txt", ".rtf"}
 
@@ -68,20 +95,29 @@ STARIA_OLLAMA_MODEL = os.getenv("STAR_OLLAMA_MODEL", "star-llama").strip()
 DEFAULT_STATUS = "Banco de talentos"
 DEFAULT_ORIGEM = "email"
 
+MIN_SCORE = int(os.getenv("STARIA_MIN_SCORE", "40"))
 
-CANDIDATOS_REFINADOS_XLSX = Path(
-    os.getenv(
-        "CANDIDATOS_REFINADOS_XLSX",
-        r"G:\Drives compartilhados\STARMKT\StarIA\banco_talentos\candidatos_refinados.xlsx",
-    )
-)
+REPROCESS_ALL_EMAILS = os.getenv("STARIA_REPROCESS_ALL_EMAILS", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "sim",
+}
 
+RESET_TALENT_BANK_BEFORE_REPROCESS = os.getenv(
+    "STARIA_RESET_TALENT_BANK_BEFORE_REPROCESS", "false"
+).lower() in {"1", "true", "yes", "sim"}
+
+EMAIL_LIMIT = int(os.getenv("STARIA_EMAIL_LIMIT", "0") or 0)
+
+MOVE_REJECTED_UNDER_MIN_SCORE = os.getenv(
+    "STARIA_MOVE_REJECTED_UNDER_MIN_SCORE", "true"
+).lower() in {"1", "true", "yes", "sim"}
 
 
 # =========================
 # UTILS
 # =========================
-
 
 def decode_mime_words(s: str) -> str:
     if not s:
@@ -109,24 +145,22 @@ def safe_str(value: Any) -> str:
     return normalize_spaces(str(value))
 
 
-def sanitize_sheet_value(value: Any) -> str:
-    s = safe_str(value)
-    if not s:
+def normalize_text(text: str) -> str:
+    if not text:
         return ""
-    if s.startswith(("=", "+", "-", "@")):
-        return "'" + s
-    return s
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = text.lower().strip()
+    text = re.sub(r"\s+", " ", text)
+    return text
 
 
-def ensure_paths():
-    CURRICULOS_DIR.mkdir(parents=True, exist_ok=True)
+def sanitize_filename(value: str, max_len: int = 140) -> str:
+    value = decode_mime_words(value or "")
+    value = re.sub(r'[<>:"/\\|?*\n\r\t]+', " ", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value[:max_len].strip() or "curriculo"
 
-    if not BANCO_TALENTOS_XLSX.exists():
-        raise RuntimeError(f"Planilha não encontrada: {BANCO_TALENTOS_XLSX}")
-
-    # Não reestruturar a planilha a cada execução do worker.
-    # A estrutura/redistribuição deve ser feita manualmente com:
-    # python -c "from rh.talent_bank_workbook import ensure_bank_workbook_structure; print(ensure_bank_workbook_structure(redistribute_existing=True))"
 
 def decode_sender(sender_raw: str) -> str:
     name, addr = parseaddr(sender_raw or "")
@@ -134,6 +168,30 @@ def decode_sender(sender_raw: str) -> str:
     if name and addr:
         return f"{name} <{addr}>"
     return addr or name or ""
+
+
+def ensure_paths():
+    CURRICULOS_DIR.mkdir(parents=True, exist_ok=True)
+    REJECTED_DIR.mkdir(parents=True, exist_ok=True)
+
+    if not BANCO_TALENTOS_XLSX.exists():
+        raise RuntimeError(f"Planilha não encontrada: {BANCO_TALENTOS_XLSX}")
+
+
+def validate_config():
+    if not EMAIL_ACCOUNT:
+        raise RuntimeError("STARIA_EMAIL_ACCOUNT não definido no .env")
+
+    if not EMAIL_PASSWORD:
+        raise RuntimeError(
+            "STARIA_EMAIL_PASSWORD não definido no .env "
+            f"({BASE_DIR / '.env'})"
+        )
+
+
+# =========================
+# REGEX EXTRACTION
+# =========================
 
 EMAIL_REGEX = r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"
 PHONE_REGEX = r"(\+55\s?)?(\(?\d{2}\)?\s?)?\d{4,5}[-.\s]?\d{4}"
@@ -143,30 +201,77 @@ PORTFOLIO_PATTERNS = [
     r"https?://(?:www\.)?dribbble\.com/\S+",
     r"https?://(?:www\.)?github\.com/\S+",
     r"https?://(?:www\.)?linkedin\.com/\S+",
+    r"https?://[^\s)>\]]+",
 ]
 
 
 def extract_email_regex(text: str) -> str:
     match = re.search(EMAIL_REGEX, text or "")
-    return match.group(0) if match else ""
+    return match.group(0).strip() if match else ""
 
 
 def extract_phone_regex(text: str) -> str:
     match = re.search(PHONE_REGEX, text or "")
-    return match.group(0) if match else ""
+    return match.group(0).strip() if match else ""
 
 
 def extract_portfolio_regex(text: str) -> str:
     for pattern in PORTFOLIO_PATTERNS:
         match = re.search(pattern, text or "", flags=re.IGNORECASE)
         if match:
-            return match.group(0)
+            return match.group(0).strip().rstrip(".,;")
     return ""
+
+
+# =========================
+# TALENT BANK RESET
+# =========================
+
+def clear_talent_bank_data_rows():
+    print("[EMAIL] Limpando dados da planilha mantendo abas, headers e estrutura...")
+
+    backup = backup_workbook(BANCO_TALENTOS_XLSX)
+
+    ensure_bank_workbook_structure(
+        banco_path=BANCO_TALENTOS_XLSX,
+        refined_path=CANDIDATOS_REFINADOS_XLSX,
+        create_backup=False,
+        redistribute_existing=False,
+    )
+
+    wb = load_workbook(BANCO_TALENTOS_XLSX)
+    headers = build_bank_headers(None)
+
+    for sheet_name in CANONICAL_SHEETS:
+        if sheet_name not in wb.sheetnames:
+            wb.create_sheet(sheet_name)
+
+        ws = wb[sheet_name]
+
+        if ws.max_row:
+            ws.delete_rows(1, ws.max_row)
+
+        ws.append(headers)
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+        for idx, header in enumerate(headers, start=1):
+            ws.cell(row=1, column=idx, value=header)
+            ws.column_dimensions[ws.cell(row=1, column=idx).column_letter].width = 22
+
+    for sheet_name in list(wb.sheetnames):
+        if sheet_name not in CANONICAL_SHEETS:
+            del wb[sheet_name]
+
+    wb.save(BANCO_TALENTOS_XLSX)
+
+    print("[EMAIL] Planilha zerada com sucesso.")
+    print("[EMAIL] Backup criado:", backup if backup else "(sem backup)")
+
 
 # =========================
 # EMAIL BODY
 # =========================
-
 
 def extract_email_body(msg) -> str:
     body = ""
@@ -179,12 +284,20 @@ def extract_email_body(msg) -> str:
             if "attachment" in disposition.lower():
                 continue
 
-            if content_type == "text/plain":
-                payload = part.get_payload(decode=True)
-                charset = part.get_content_charset() or "utf-8"
+            payload = part.get_payload(decode=True)
+            charset = part.get_content_charset() or "utf-8"
 
-                if payload:
-                    body += payload.decode(charset, errors="ignore")
+            if not payload:
+                continue
+
+            if content_type == "text/plain":
+                body += payload.decode(charset, errors="ignore")
+
+            elif content_type == "text/html" and not body:
+                html = payload.decode(charset, errors="ignore")
+                html = re.sub(r"<br\s*/?>", "\n", html, flags=re.I)
+                html = re.sub(r"<[^>]+>", " ", html)
+                body += normalize_spaces(html)
     else:
         payload = msg.get_payload(decode=True)
         charset = msg.get_content_charset() or "utf-8"
@@ -196,9 +309,8 @@ def extract_email_body(msg) -> str:
 
 
 # =========================
-# EXTRACT NÍVEL
+# EXTRACT NÍVEL / PORTFOLIO
 # =========================
-
 
 def extract_level(email_body: str) -> str:
     if not email_body:
@@ -226,43 +338,26 @@ def extract_level(email_body: str) -> str:
     return ""
 
 
-# =========================
-# EXTRACT PORTFOLIO
-# =========================
-
-
 def extract_portfolio(email_body: str) -> str:
     if not email_body:
         return ""
+
+    found = extract_portfolio_regex(email_body)
+    if found:
+        return found
 
     pattern = r"(portf[oó]lio|portfolio)\s*:\s*(https?://\S+|\S+\.\S+)"
     match = re.search(pattern, email_body, flags=re.IGNORECASE)
 
     if match:
-        return match.group(2).strip()
+        return match.group(2).strip().rstrip(".,;")
 
     return ""
 
 
 # =========================
-# CONFIG CHECK
-# =========================
-
-
-def validate_config():
-    if not EMAIL_ACCOUNT:
-        raise RuntimeError("STARIA_EMAIL_ACCOUNT não definido no .env")
-
-    if not EMAIL_PASSWORD:
-        raise RuntimeError(
-            "STARIA_EMAIL_PASSWORD não definido no .env " f"({BASE_DIR / '.env'})"
-        )
-
-
-# =========================
 # CONNECT MAILBOX
 # =========================
-
 
 def connect_mailbox():
     validate_config()
@@ -274,7 +369,10 @@ def connect_mailbox():
     print("[EMAIL] CURRICULOS_DIR =", CURRICULOS_DIR)
     print("[EMAIL] BANCO_TALENTOS_XLSX =", BANCO_TALENTOS_XLSX)
     print("[EMAIL] STARIA_API_BASE =", STARIA_API_BASE)
-    print("[EMAIL] PASSWORD_LENGTH =", len(EMAIL_PASSWORD))
+    print("[EMAIL] REPROCESS_ALL_EMAILS =", REPROCESS_ALL_EMAILS)
+    print("[EMAIL] RESET_TALENT_BANK_BEFORE_REPROCESS =", RESET_TALENT_BANK_BEFORE_REPROCESS)
+    print("[EMAIL] EMAIL_LIMIT =", EMAIL_LIMIT if EMAIL_LIMIT else "sem limite")
+    print("[EMAIL] MIN_SCORE =", MIN_SCORE)
 
     mail = imaplib.IMAP4_SSL(IMAP_SERVER)
     mail.login(EMAIL_ACCOUNT, EMAIL_PASSWORD)
@@ -284,13 +382,147 @@ def connect_mailbox():
 
 
 # =========================
-# SAVE ATTACHMENTS
+# FILE HASH / INDEX
 # =========================
 
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
-def save_attachment(msg):
-    saved_files = []
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def load_curriculos_index() -> dict[str, str]:
+    if INDEX_PATH.exists():
+        try:
+            data = json.loads(INDEX_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return {str(k): str(v) for k, v in data.items()}
+        except Exception:
+            pass
+
+    index = {}
+    for p in CURRICULOS_DIR.glob("*"):
+        if p.is_file() and p.suffix.lower() in ALLOWED_EXTS.union({".pdf"}):
+            try:
+                index[sha256_file(p)] = str(p)
+            except Exception:
+                continue
+
+    save_curriculos_index(index)
+    return index
+
+
+def save_curriculos_index(index: dict[str, str]):
+    INDEX_PATH.write_text(
+        json.dumps(index, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def existing_file_by_hash(file_hash: str, index: dict[str, str]) -> Path | None:
+    existing = index.get(file_hash)
+    if existing:
+        p = Path(existing)
+        if p.exists():
+            return p
+    return None
+
+
+# =========================
+# PDF CONVERSION / SAVE ATTACHMENTS
+# =========================
+
+def find_soffice() -> str:
+    candidates = [
+        "soffice",
+        r"C:\Program Files\LibreOffice\program\soffice.exe",
+        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+    ]
+
+    for c in candidates:
+        try:
+            result = subprocess.run(
+                [c, "--version"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                return c
+        except Exception:
+            continue
+
+    return "soffice"
+
+
+def convert_to_pdf_if_possible(file_path: Path) -> Path:
+    ext = file_path.suffix.lower()
+
+    if ext == ".pdf":
+        return file_path
+
+    if ext not in {".doc", ".docx"}:
+        return file_path
+
+    try:
+        output_dir = file_path.parent
+        soffice = find_soffice()
+
+        subprocess.run(
+            [
+                soffice,
+                "--headless",
+                "--convert-to",
+                "pdf",
+                str(file_path),
+                "--outdir",
+                str(output_dir),
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=120,
+        )
+
+        pdf_path = file_path.with_suffix(".pdf")
+
+        if pdf_path.exists():
+            print(f"[EMAIL] Convertido para PDF: {pdf_path.name}")
+            return pdf_path
+
+    except Exception as e:
+        print(f"[EMAIL] Falha ao converter PDF: {file_path.name} | {e}")
+
+    return file_path
+
+
+def build_attachment_safe_name(
+    filename: str,
+    subject: str = "",
+    explicit_role: str = "",
+) -> str:
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    original = sanitize_filename(filename)
+    vacancy = sanitize_filename(explicit_role or extract_job_title_from_subject(subject))
+
+    if vacancy:
+        return f"{timestamp}_{vacancy}_{original}"
+
+    return f"{timestamp}_{original}"
+
+
+def save_attachment(msg, subject: str = "", explicit_role: str = "") -> list[Path]:
+    saved_files: list[Path] = []
     CURRICULOS_DIR.mkdir(parents=True, exist_ok=True)
+
+    index = load_curriculos_index()
+    index_changed = False
 
     for part in msg.walk():
         content_disposition = str(part.get("Content-Disposition") or "")
@@ -309,15 +541,39 @@ def save_attachment(msg):
             print(f"[EMAIL] Anexo ignorado por extensão: {filename}")
             continue
 
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_name = f"{timestamp}_{filename}"
+        payload = part.get_payload(decode=True)
+        if not payload:
+            print(f"[EMAIL] Anexo sem payload ignorado: {filename}")
+            continue
+
+        file_hash = sha256_bytes(payload)
+        existing = existing_file_by_hash(file_hash, index)
+
+        if existing:
+            print(f"[EMAIL] Currículo já existe por hash. Reutilizando: {existing}")
+            saved_files.append(existing)
+            continue
+
+        safe_name = build_attachment_safe_name(filename, subject, explicit_role)
         filepath = CURRICULOS_DIR / safe_name
 
+        if filepath.exists():
+            filepath = CURRICULOS_DIR / f"{filepath.stem}_{file_hash[:10]}{filepath.suffix}"
+
         with open(filepath, "wb") as f:
-            f.write(part.get_payload(decode=True))
+            f.write(payload)
 
         original_filepath = filepath
         filepath = convert_to_pdf_if_possible(filepath)
+
+        try:
+            final_hash = sha256_file(filepath)
+        except Exception:
+            final_hash = file_hash
+
+        index[final_hash] = str(filepath)
+        index[file_hash] = str(filepath)
+        index_changed = True
 
         if filepath != original_filepath:
             print("[EMAIL] Currículo convertido para PDF:", filepath)
@@ -326,13 +582,30 @@ def save_attachment(msg):
 
         saved_files.append(filepath)
 
+    if index_changed:
+        save_curriculos_index(index)
+
     return saved_files
+
+
+def move_rejected_file(file_path: Path) -> Path:
+    REJECTED_DIR.mkdir(parents=True, exist_ok=True)
+
+    target = REJECTED_DIR / file_path.name
+
+    if target.exists():
+        target = REJECTED_DIR / f"{file_path.stem}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}{file_path.suffix}"
+
+    try:
+        shutil.move(str(file_path), str(target))
+        return target
+    except Exception:
+        return file_path
 
 
 # =========================
 # TEXT EXTRACTION
 # =========================
-
 
 def extract_text_from_pdf(file_path: Path) -> str:
     try:
@@ -385,276 +658,93 @@ def extract_text_from_file(file_path: Path) -> str:
 
 
 # =========================
-# CARGO FALLBACK
+# ROLE DETECTION - FONTE DA VERDADE
 # =========================
 
+ROLE_PATTERNS = [
+    ("DIAGRAMADOR", [
+        r"\bdiagramador(?:a)?\b",
+        r"\bdiagrama[cç][aã]o\b",
+        r"\btabloide\b",
+        r"\btabl[oó]ide\b",
+        r"\bencarte\b",
+        r"\bofertas\b",
+    ]),
+    ("ATENDIMENTO", [
+        r"\batendimento\b",
+        r"\batendimento\s+s[eê]nior\b",
+        r"\baccount\s+manager\b",
+        r"\brelacionamento\b",
+    ]),
+    ("COORDENADOR DE CONTEÚDO", [
+        r"\bcoordenador(?:a)?\s+de\s+conte[uú]do\b",
+        r"\bconte[uú]do\b",
+        r"\bsocial\s+media\b",
+    ]),
+    ("DIRETOR DE ARTE BRANDING", [
+        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bbranding\b",
+        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bidentidade\b",
+        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bproduto\b",
+        r"\bbranding\b",
+        r"\bidentidade\s+visual\b",
+    ]),
+    ("DIRETOR DE ARTE DIGITAL", [
+        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bdigital\b",
+        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bperformance\b",
+        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bmarketplace\b",
+    ]),
+    ("DIRETOR DE ARTE INSTITUCIONAL", [
+        r"\bdiretor(?:a)?\s+de\s+arte\b.*\binstitucional\b",
+        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bcampanhas\b",
+        r"\bdiretor(?:a)?\s+de\s+arte\b",
+        r"\bdesigner\s+gr[aá]fico\b",
+    ]),
+    ("PLAN. PERFORMANCE & GROWTH", [
+        r"\bperformance\b",
+        r"\bgrowth\b",
+        r"\bgoogle\s+ads\b",
+        r"\bmeta\s+ads\b",
+        r"\btiktok\s+ads\b",
+        r"\banalytics\b",
+    ]),
+    ("PLANEJAMENTO ESTRATÉGICO", [
+        r"\bplanejamento\s+estrat[eé]gico\b",
+        r"\bestrategista\b",
+        r"\bplanejamento\b",
+    ]),
+    ("MOTION DESIGNER", [
+        r"\bmotion\b",
+        r"\bmotion\s+designer\b",
+        r"\banima[cç][aã]o\b",
+    ]),
+    ("REDATOR", [
+        r"\bredator(?:a)?\b",
+        r"\bcopywriter\b",
+        r"\breda[cç][aã]o\b",
+    ]),
+    ("EXECUTIVO DE CONTAS", [
+        r"\bexecutivo(?:a)?\s+de\s+contas\b",
+        r"\bexecutivo(?:a)?\s+comercial\b",
+        r"\baccount\s+executive\b",
+    ]),
+]
 
-def guess_job_title_from_text(text: str) -> str:
-    """
-    Heurística simples para cargo quando a IA não preencher.
-    """
-    if not text:
+
+def detect_explicit_role_from_text(text: str) -> str:
+    n = normalize_text(text)
+
+    if not n:
         return ""
 
-    lines = [normalize_spaces(x) for x in text.splitlines() if normalize_spaces(x)]
-    top = lines[:20]
-
-    job_patterns = [
-        r"\b(analista [\w\s]+)\b",
-        r"\b(assistente [\w\s]+)\b",
-        r"\b(coordenador[a]? [\w\s]+)\b",
-        r"\b(gerente [\w\s]+)\b",
-        r"\b(especialista [\w\s]+)\b",
-        r"\b(supervisor[a]? [\w\s]+)\b",
-        r"\b(designer(?: gráfico)?(?: [\w\s]+)?)\b",
-        r"\b(social media)\b",
-        r"\b(marketing(?: [\w\s]+)?)\b",
-        r"\b(produtor[a]? de eventos)\b",
-        r"\b(eventos corporativos)\b",
-        r"\b(planejamento de eventos)\b",
-    ]
-
-    for line in top:
-        lower = line.lower()
-        for pattern in job_patterns:
-            m = re.search(pattern, lower, flags=re.IGNORECASE)
-            if m:
-                return normalize_spaces(m.group(1)).title()
+    for sheet_name, patterns in ROLE_PATTERNS:
+        for pattern in patterns:
+            if re.search(pattern, n, flags=re.IGNORECASE):
+                return sheet_name
 
     return ""
 
 
-# =========================
-# AI EXTRACTION
-# =========================
-
-
-def extract_json_block(text: str) -> str:
-    if not text:
-        return ""
-
-    text = text.strip().replace("```json", "").replace("```", "").strip()
-
-    start = text.find("{")
-    end = text.rfind("}")
-
-    if start >= 0 and end > start:
-        return text[start : end + 1].strip()
-
-    return text
-
-
-def extract_candidate_data_with_ai(file_path: Path) -> dict:
-    text = extract_text_from_file(file_path)
-
-    print(f"[EMAIL] Texto extraído de {file_path.name}: {len(text)} caracteres")
-
-    if not text.strip():
-        return {
-            "nome_completo": "",
-            "idade": "",
-            "localizacao": "",
-            "cargo_pretendido": "",
-            "habilidades": "",
-            "formacoes": "",
-            "email": "",
-            "telefone": "",
-            "portfolio": "",
-        }
-
-    # 🔥 EXTRAÇÃO REGEX PRIMEIRO
-    email_regex = extract_email_regex(text)
-    phone_regex = extract_phone_regex(text)
-    portfolio_regex = extract_portfolio_regex(text)
-
-    prompt = f"""
-Extraia do currículo as informações abaixo e devolva APENAS JSON válido.
-
-Campos:
-{{
-  "nome_completo": "",
-  "idade": "",
-  "localizacao": "",
-  "cargo_pretendido": "",
-  "habilidades": "",
-  "formacoes": "",
-  "email": "",
-  "telefone": "",
-  "portfolio": ""
-}}
-
-Regras:
-- NÃO invente dados
-- Use apenas o currículo
-- Se não encontrar, deixe "N/I"
-
-Currículo:
-{text[:15000]}
-"""
-
-    try:
-        resp = requests.post(
-            f"{STARIA_API_BASE}/ask",
-            json={
-                "question": prompt,
-                "use_rag": False,
-                "model": STARIA_OLLAMA_MODEL,
-            },
-            timeout=180,
-        )
-
-        resp.raise_for_status()
-        answer = resp.json().get("answer", "")
-
-        parsed = json.loads(extract_json_block(answer))
-
-    except Exception as e:
-        print(f"[EMAIL] Falha IA: {e}")
-        parsed = {}
-
-    # 🔥 MERGE INTELIGENTE (IA + REGEX)
-    return {
-        "nome_completo": safe_str(parsed.get("nome_completo")),
-        "idade": safe_str(parsed.get("idade")),
-        "localizacao": safe_str(parsed.get("localizacao")),
-        "cargo_pretendido": safe_str(parsed.get("cargo_pretendido")),
-        "habilidades": safe_str(parsed.get("habilidades")),
-        "formacoes": safe_str(parsed.get("formacoes")),
-        "email": safe_str(parsed.get("email") or email_regex),
-        "telefone": safe_str(parsed.get("telefone") or phone_regex),
-        "portfolio": safe_str(parsed.get("portfolio") or portfolio_regex),
-    }
-
-# =========================
-# EXCEL HELPERS
-# =========================
-
-
-def build_header_map(ws) -> dict:
-    return {
-        safe_str(cell.value): idx + 1
-        for idx, cell in enumerate(ws[1])
-        if safe_str(cell.value)
-    }
-
-
-def get_next_candidate_id(ws, header_map: dict) -> str:
-    id_col = header_map.get("ID")
-    if not id_col:
-        return "BT0001"
-
-    max_num = 0
-    for row in range(2, ws.max_row + 1):
-        value = ws.cell(row=row, column=id_col).value
-        s = safe_str(value)
-        m = re.match(r"BT(\d+)", s, flags=re.IGNORECASE)
-        if m:
-            max_num = max(max_num, int(m.group(1)))
-
-    return f"BT{max_num + 1:04d}"
-
-
-def append_candidate_to_sheet(
-    file_path: Path,
-    sender: str,
-    level: str,
-    portfolio: str,
-    extracted: dict,
-    vacancy_title: str = "",
-):
-    curriculum_text = extract_text_from_file(file_path)
-
-    requested_role = vacancy_title if vacancy_title else (
-    extracted.get("cargo_pretendido") or guess_job_title_from_text(curriculum_text)
-)
-
-    match_result = score_candidate_against_profiles(
-        candidate=extracted,
-        curriculum_text=curriculum_text,
-        requested_role=requested_role,
-        extra_query=vacancy_title,
-    )
-
-    best = match_result.get("best") or {}
-    top_matches = match_result.get("top_matches") or []
-
-    nota = int(match_result.get("nota", 0) or 0)
-
-    if nota < 50:
-        print(
-            f"[EMAIL] Candidato descartado por nota abaixo de corte: "
-            f"{extracted.get('nome_completo') or file_path.name} | Nota: {nota}"
-        )
-        return
-
-    top_matches_text = "; ".join(
-        [
-            f"{m.get('title', '')} ({m.get('nota', m.get('score_pct', 0))})"
-            for m in top_matches
-            if m.get("title")
-        ]
-    )
-
-    final_portfolio = portfolio or ""
-    if not final_portfolio:
-        final_portfolio = str(file_path)
-
-    values = {
-        "Nota": nota,
-        "Nome completo": extracted.get("nome_completo", ""),
-        "Idade": extracted.get("idade", ""),
-        "Localização": extracted.get("localizacao", ""),
-        "Cargo pretendido": requested_role,
-        "Nível": level or "",
-        "Portfólio": extracted.get("portfolio") or final_portfolio or str(file_path),
-        "Habilidades": extracted.get("habilidades", ""),
-        "Formações": extracted.get("formacoes", ""),
-        "Email": extracted.get("email", ""),
-        "Telefone": extracted.get("telefone", ""),
-        "Caminho do currículo": str(file_path),
-        "Nome do arquivo": file_path.name,
-        "Data de entrada": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "Origem": DEFAULT_ORIGEM,
-        "Remetente do email": sender,
-        "Status": DEFAULT_STATUS,
-        "Observações": "",
-        "Role ID sugerido": best.get("role_id", ""),
-        "Título normalizado": best.get("title", ""),
-        "Top 3 roles aderentes": top_matches_text,
-        "Resumo de aderência": match_result.get("summary", ""),
-        "Flags de risco": "; ".join(best.get("gaps", [])[:6]),
-    }
-
-    candidate_id = append_candidate_record(
-        values=values,
-        banco_path=BANCO_TALENTOS_XLSX,
-        refined_path=CANDIDATOS_REFINADOS_XLSX,
-    )
-
-    if candidate_id == "DUPLICADO":
-        print(
-            f"[EMAIL] Candidato duplicado ignorado: "
-            f"{values.get('Nome completo') or values.get('Email') or file_path.name}"
-        )
-        return
-
-    print(
-        f"[EMAIL] Planilha atualizada com candidato {candidate_id}: "
-        f"{file_path.name} | Vaga: {requested_role} | "
-        f"Nota: {match_result.get('nota', 0)} | Perfil: {best.get('title', '')}"
-    )
-
-
-# =========================
-# EMAIL FILTERS
-# =========================
-
-
 def extract_job_title_from_subject(subject: str) -> str:
-    """
-    Exemplo:
-    New application: Diretor(a) de Arte Sênior — Criação (...) from Nome
-    """
     if not subject:
         return ""
 
@@ -676,6 +766,312 @@ def extract_job_title_from_subject(subject: str) -> str:
     return ""
 
 
+def extract_explicit_role_from_email(subject: str, body: str) -> str:
+    linked_in_title = extract_job_title_from_subject(subject)
+    if linked_in_title:
+        role = detect_explicit_role_from_text(linked_in_title)
+        if role:
+            return role
+
+    role = detect_explicit_role_from_text(subject)
+    if role:
+        return role
+
+    # Só usa o corpo do email, não o currículo.
+    # Procura em trechos objetivos de vaga/cargo.
+    body_text = normalize_text(body or "")
+    focused_patterns = [
+        r"vaga\s*[:\-]\s*([^\n\r|;,.]{2,80})",
+        r"cargo\s*[:\-]\s*([^\n\r|;,.]{2,80})",
+        r"oportunidade\s*[:\-]\s*([^\n\r|;,.]{2,80})",
+        r"candidatura\s*[:\-]\s*([^\n\r|;,.]{2,80})",
+        r"aplicou\s+para\s+([^\n\r|;,.]{2,80})",
+        r"aplicando\s+para\s+([^\n\r|;,.]{2,80})",
+        r"interesse\s+na\s+vaga\s+de\s+([^\n\r|;,.]{2,80})",
+    ]
+
+    for pattern in focused_patterns:
+        m = re.search(pattern, body_text, flags=re.IGNORECASE)
+        if not m:
+            continue
+
+        role = detect_explicit_role_from_text(m.group(1))
+        if role:
+            return role
+
+    return ""
+
+
+# =========================
+# AI EXTRACTION
+# =========================
+
+def extract_json_block(text: str) -> str:
+    if not text:
+        return ""
+
+    text = text.strip().replace("```json", "").replace("```", "").strip()
+
+    start = text.find("{")
+    end = text.rfind("}")
+
+    if start >= 0 and end > start:
+        return text[start: end + 1].strip()
+
+    return text
+
+
+def clean_ni(value: Any) -> str:
+    s = safe_str(value)
+    if s.lower() in {
+        "n/i",
+        "ni",
+        "não informado",
+        "nao informado",
+        "não encontrado",
+        "nao encontrado",
+        "null",
+        "none",
+    }:
+        return ""
+    return s
+
+
+def extract_candidate_data_with_ai(file_path: Path) -> dict:
+    text = extract_text_from_file(file_path)
+
+    print(f"[EMAIL] Texto extraído de {file_path.name}: {len(text)} caracteres")
+
+    empty = {
+        "nome_completo": "",
+        "idade": "",
+        "localizacao": "",
+        "cargo_pretendido": "",
+        "habilidades": "",
+        "formacoes": "",
+        "email": "",
+        "telefone": "",
+        "portfolio": "",
+    }
+
+    if not text.strip():
+        return empty
+
+    email_regex = extract_email_regex(text)
+    phone_regex = extract_phone_regex(text)
+    portfolio_regex = extract_portfolio_regex(text)
+
+    prompt = f"""
+Extraia do currículo as informações abaixo e devolva APENAS JSON válido.
+
+Campos:
+{{
+  "nome_completo": "",
+  "idade": "",
+  "localizacao": "",
+  "cargo_pretendido": "",
+  "habilidades": "",
+  "formacoes": "",
+  "email": "",
+  "telefone": "",
+  "portfolio": ""
+}}
+
+Regras:
+- NÃO invente dados.
+- Use apenas o currículo.
+- Se não encontrar, deixe "".
+- "nome_completo" deve ser nome de pessoa explicitamente presente.
+- "idade" só se houver idade ou data de nascimento explícita.
+- "localizacao" deve ser cidade/região/endereço explicitamente presente.
+- "habilidades" deve ser string curta separada por "; ".
+- "formacoes" deve ser string curta separada por "; ".
+- Responda somente JSON puro.
+
+Arquivo: {file_path.name}
+
+Currículo:
+{text[:15000]}
+""".strip()
+
+    try:
+        resp = requests.post(
+            f"{STARIA_API_BASE}/ask",
+            json={
+                "question": prompt,
+                "use_rag": False,
+                "model": STARIA_OLLAMA_MODEL,
+            },
+            timeout=180,
+        )
+
+        resp.raise_for_status()
+        answer = resp.json().get("answer", "")
+        parsed = json.loads(extract_json_block(answer))
+
+    except Exception as e:
+        print(f"[EMAIL] Falha IA: {e}")
+        parsed = {}
+
+    return {
+        "nome_completo": clean_ni(parsed.get("nome_completo")),
+        "idade": clean_ni(parsed.get("idade")),
+        "localizacao": clean_ni(parsed.get("localizacao")),
+        "cargo_pretendido": clean_ni(parsed.get("cargo_pretendido")),
+        "habilidades": clean_ni(parsed.get("habilidades")),
+        "formacoes": clean_ni(parsed.get("formacoes")),
+        "email": clean_ni(parsed.get("email") or email_regex),
+        "telefone": clean_ni(parsed.get("telefone") or phone_regex),
+        "portfolio": clean_ni(parsed.get("portfolio") or portfolio_regex),
+    }
+
+
+def enrich_extracted_with_fallbacks(
+    extracted: dict,
+    file_path: Path,
+    curriculum_text: str,
+) -> dict:
+    extracted = dict(extracted or {})
+
+    if not extracted.get("email"):
+        extracted["email"] = extract_email_regex(curriculum_text)
+
+    if not extracted.get("telefone"):
+        extracted["telefone"] = extract_phone_regex(curriculum_text)
+
+    if not extracted.get("portfolio"):
+        extracted["portfolio"] = extract_portfolio_regex(curriculum_text)
+
+    if not extracted.get("nome_completo"):
+        lines = curriculum_text.splitlines()
+        for line in lines[:12]:
+            line = normalize_spaces(line)
+            if not line:
+                continue
+            normalized_line = normalize_text(line)
+            if "curriculum" in normalized_line or "curriculo" in normalized_line:
+                continue
+            if len(line.split()) >= 2 and len(line) <= 80:
+                extracted["nome_completo"] = line
+                break
+
+    return extracted
+
+
+# =========================
+# EXCEL / MATCHING
+# =========================
+
+def append_candidate_to_sheet(
+    file_path: Path,
+    sender: str,
+    level: str,
+    portfolio: str,
+    extracted: dict,
+    explicit_sheet: str,
+    subject: str = "",
+):
+    if not explicit_sheet:
+        print(
+            f"[EMAIL] Sem vaga explícita confiável antes do currículo. "
+            f"Linha NÃO será gravada: {file_path.name}"
+        )
+        return
+
+    curriculum_text = extract_text_from_file(file_path)
+
+    target_sheet = explicit_sheet
+    cargo_canonico = sheet_display_title(target_sheet)
+
+    extracted_for_match = dict(extracted)
+    extracted_for_match["cargo_pretendido"] = cargo_canonico
+
+    match_result = score_candidate_against_profiles(
+        candidate=extracted_for_match,
+        curriculum_text=curriculum_text,
+        requested_role=cargo_canonico,
+        extra_query=f"{subject} {cargo_canonico}".strip(),
+    )
+
+    best = match_result.get("best") or {}
+    top_matches = match_result.get("top_matches") or []
+    nota = int(match_result.get("nota", 0) or 0)
+
+    if nota < MIN_SCORE:
+        print(
+            f"[EMAIL] Candidato descartado por nota abaixo de corte: "
+            f"{extracted.get('nome_completo') or file_path.name} | "
+            f"Vaga: {cargo_canonico} | Nota: {nota}"
+        )
+
+        if REPROCESS_ALL_EMAILS and MOVE_REJECTED_UNDER_MIN_SCORE and file_path.exists():
+            moved_to = move_rejected_file(file_path)
+            print("[EMAIL] Currículo movido para rejeitados:", moved_to)
+
+        return
+
+    top_matches_text = "; ".join(
+        [
+            f"{m.get('title', '')} ({m.get('nota', m.get('score_pct', 0))})"
+            for m in top_matches
+            if m.get("title")
+        ]
+    )
+
+    final_portfolio = extracted.get("portfolio") or portfolio or str(file_path)
+
+    values = {
+        "Nota": nota,
+        "Nome completo": extracted.get("nome_completo", ""),
+        "Localização": extracted.get("localizacao", ""),
+        "Cargo pretendido": cargo_canonico,
+        "Nível": level or "",
+        "Portfólio": final_portfolio,
+        "Habilidades": extracted.get("habilidades", ""),
+        "Formação": extracted.get("formacoes", ""),
+        "Email": extracted.get("email", ""),
+        "Telefone": extracted.get("telefone", ""),
+        "Caminho do currículo": str(file_path),
+        "Nome do arquivo": file_path.name,
+        "Data de entrada": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "Origem": DEFAULT_ORIGEM,
+        "Remetente do email": sender,
+        "Status": DEFAULT_STATUS,
+        "Observações": "",
+        "Role ID sugerido": best.get("role_id", ""),
+        "Título normalizado": best.get("title", ""),
+        "Top 3 roles aderentes": top_matches_text,
+        "Resumo de aderência": match_result.get("summary", ""),
+        "Flags de risco": "; ".join(best.get("gaps", [])[:6]),
+    }
+
+    candidate_id = append_candidate_record(
+        values=values,
+        banco_path=BANCO_TALENTOS_XLSX,
+        refined_path=CANDIDATOS_REFINADOS_XLSX,
+        target_sheet=target_sheet,
+    )
+
+    if candidate_id == "DUPLICADO":
+        print(
+            f"[EMAIL] Candidato duplicado ignorado: "
+            f"{values.get('Nome completo') or values.get('Email') or file_path.name} | "
+            f"Aba: {target_sheet}"
+        )
+        return
+
+    print(
+        f"[EMAIL] Planilha atualizada com candidato {candidate_id}: "
+        f"{file_path.name} | Aba: {target_sheet} | "
+        f"Cargo: {cargo_canonico} | Nota: {nota} | "
+        f"Perfil: {best.get('title', '')}"
+    )
+
+
+# =========================
+# EMAIL FILTERS
+# =========================
+
 APPLICATION_KEYWORDS = [
     "new application",
     "application received",
@@ -686,19 +1082,17 @@ APPLICATION_KEYWORDS = [
     "inscrição",
 ]
 
-RESUME_FILENAME_HINTS = ["cv", "curriculo", "currículo", "resumo", "resume"]
-
-
-def normalize_text(text: str) -> str:
-    if not text:
-        return ""
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(c for c in text if not unicodedata.combining(c))
-    return text.lower().strip()
-
-
-def is_bank_talent_subject(subject: str) -> bool:
-    return "banco de talentos" in normalize_text(subject)
+DIRECT_APPLICATION_HINTS = [
+    "vaga",
+    "curriculo",
+    "currículo",
+    "candidatura",
+    "candidate",
+    "application",
+    "resume",
+    "portfolio",
+    "portfólio",
+]
 
 
 def is_linkedin_sender(sender: str) -> bool:
@@ -710,107 +1104,78 @@ def has_application_signal(subject: str, body: str) -> bool:
     return any(k in text for k in APPLICATION_KEYWORDS)
 
 
-def filename_looks_like_cv(filename: str) -> bool:
-    name = normalize_text(filename)
-
-    if not any(name.endswith(ext) for ext in ALLOWED_EXTS):
-        return False
-
-    return any(hint in name for hint in RESUME_FILENAME_HINTS)
+def has_direct_application_signal(subject: str, body: str) -> bool:
+    text = normalize_text(subject + " " + body)
+    return any(k in text for k in DIRECT_APPLICATION_HINTS)
 
 
 def email_has_cv_attachment(msg) -> bool:
     for part in msg.walk():
-
         content_disposition = str(part.get("Content-Disposition") or "")
         if "attachment" not in content_disposition.lower():
             continue
 
         filename = part.get_filename()
-
         if not filename:
             continue
 
         filename = decode_mime_words(filename)
+        ext = Path(filename).suffix.lower()
 
-        if filename_looks_like_cv(filename):
+        if ext in ALLOWED_EXTS:
             return True
 
     return False
 
 
-DIRECT_APPLICATION_HINTS = [
-    "vaga",
-    "curriculo",
-    "currículo",
-    "candidatura",
-    "candidate",
-    "application",
-    "resume",
-]
+def should_process_email(msg, subject: str, sender: str, body: str) -> tuple[bool, str]:
+    if not email_has_cv_attachment(msg):
+        return False, ""
 
+    explicit_sheet = extract_explicit_role_from_email(subject, body)
 
-def has_direct_application_signal(subject: str, body: str) -> bool:
-    text = normalize_text(subject + " " + body)
-    return any(k in text for k in DIRECT_APPLICATION_HINTS)
+    if not explicit_sheet:
+        return False, ""
 
+    linkedin_flow = is_linkedin_sender(sender) and has_application_signal(subject, body)
+    direct_flow = has_direct_application_signal(subject, body)
+    role_flow = bool(explicit_sheet)
 
-DIRECT_APPLICATION_HINTS = [
-    "vaga",
-    "curriculo",
-    "currículo",
-    "candidatura",
-    "candidate",
-    "application",
-    "resume",
-]
-
-
-def has_direct_application_signal(subject: str, body: str) -> bool:
-    text = normalize_text(subject + " " + body)
-    return any(k in text for k in DIRECT_APPLICATION_HINTS)
-
-
-
-def should_process_email(msg, subject: str, sender: str, body: str) -> bool:
-
-    legacy_flow = is_bank_talent_subject(subject)
-
-    linkedin_flow = (
-        is_linkedin_sender(sender)
-        and has_application_signal(subject, body)
-        and email_has_cv_attachment(msg)
-    )
-
-    direct_cv_flow = email_has_cv_attachment(msg) and has_direct_application_signal(
-        subject, body
-    )
-
-    return legacy_flow or linkedin_flow or direct_cv_flow
+    return bool(linkedin_flow or direct_flow or role_flow), explicit_sheet
 
 
 # =========================
 # PROCESS INBOX
 # =========================
 
-
-
-
-
 def process_inbox():
     mail = connect_mailbox()
     mail.select("inbox")
 
-    status, messages = mail.search(None, "UNSEEN")
+    if RESET_TALENT_BANK_BEFORE_REPROCESS:
+        clear_talent_bank_data_rows()
+
+    search_criteria = "ALL" if REPROCESS_ALL_EMAILS else "UNSEEN"
+    status, messages = mail.search(None, search_criteria)
 
     if status != "OK":
         print("[EMAIL] Erro ao buscar emails.")
         return
 
     mail_ids = messages[0].split()
-    print("[EMAIL] Emails novos encontrados:", len(mail_ids))
+    print(f"[EMAIL] Critério IMAP: {search_criteria}")
+    print("[EMAIL] Emails encontrados:", len(mail_ids))
 
-    for mail_id in mail_ids:
+    if EMAIL_LIMIT > 0:
+        mail_ids = mail_ids[:EMAIL_LIMIT]
+        print("[EMAIL] MODO TESTE/LIMITE. Processando apenas:", len(mail_ids))
+
+    processed = 0
+    ignored = 0
+    with_resume = 0
+    no_explicit_role = 0
+
+    for idx, mail_id in enumerate(mail_ids, start=1):
         status, msg_data = mail.fetch(mail_id, "(RFC822)")
 
         if status != "OK":
@@ -823,65 +1188,53 @@ def process_inbox():
         subject = decode_mime_words(msg.get("Subject", ""))
         sender_raw = msg.get("From", "")
         sender = decode_sender(sender_raw)
+        body = extract_email_body(msg)
 
-        print("\n[EMAIL] Processando email")
+        print(f"\n[EMAIL] {idx}/{len(mail_ids)} Processando email")
         print("[EMAIL] Assunto:", subject)
         print("[EMAIL] De:", sender)
 
-        body = extract_email_body(msg)
+        should_process, explicit_sheet = should_process_email(msg, subject, sender, body)
 
-        if not should_process_email(msg, subject, sender, body):
-            print("[EMAIL] Ignorado por não atender critérios de currículo")
+        if not should_process:
+            if email_has_cv_attachment(msg) and not explicit_sheet:
+                print("[EMAIL] Ignorado: tem currículo, mas não há vaga explícita confiável no assunto/corpo.")
+                no_explicit_role += 1
+            else:
+                print("[EMAIL] Ignorado por não atender critérios de currículo")
+            ignored += 1
             continue
 
         level = extract_level(body)
         portfolio = extract_portfolio(body)
+        cargo_canonico = sheet_display_title(explicit_sheet)
 
         print("[EMAIL] Nível detectado:", level if level else "não informado")
         print("[EMAIL] Portfólio detectado:", portfolio if portfolio else "não informado")
+        print("[EMAIL] Vaga explícita detectada:", cargo_canonico)
+        print("[EMAIL] Aba destino:", explicit_sheet)
 
-        vacancy_title = extract_job_title_from_subject(subject)
-
-        print(
-            "[EMAIL] Vaga detectada:",
-            vacancy_title if vacancy_title else "não informada",
-        )
-
-        saved = save_attachment(msg)
+        saved = save_attachment(msg, subject=subject, explicit_role=cargo_canonico)
 
         if not saved:
             print("[EMAIL] Nenhum currículo válido encontrado")
+            ignored += 1
             continue
 
-        print("[EMAIL] Total de currículos salvos:", len(saved))
+        with_resume += 1
+        print("[EMAIL] Total de currículos disponíveis:", len(saved))
 
         for file_path in saved:
-
-            # 🔥 TEXTO DO CURRÍCULO
             curriculum_text = extract_text_from_file(file_path)
 
             extracted = extract_candidate_data_with_ai(file_path)
+            extracted = enrich_extracted_with_fallbacks(
+                extracted=extracted,
+                file_path=file_path,
+                curriculum_text=curriculum_text,
+            )
 
-            # 🔥 FALLBACKS IMPORTANTES
-            if not extracted.get("email"):
-                extracted["email"] = extract_email_regex(curriculum_text)
-
-            if not extracted.get("telefone"):
-                extracted["telefone"] = extract_phone_regex(curriculum_text)
-
-            if not extracted.get("portfolio"):
-                extracted["portfolio"] = extract_portfolio_regex(curriculum_text)
-
-            if not extracted.get("nome_completo"):
-                lines = curriculum_text.splitlines()
-                for line in lines[:10]:
-                    if len(line.strip().split()) >= 2:
-                        extracted["nome_completo"] = line.strip()
-                        break
-
-            # 🔥 FORÇA CARGO MELHOR
-            if not extracted.get("cargo_pretendido"):
-                extracted["cargo_pretendido"] = guess_job_title_from_text(curriculum_text)
+            extracted["cargo_pretendido"] = cargo_canonico
 
             print("[EMAIL] Dados extraídos:")
             print("         Nome:", extracted.get("nome_completo") or "(vazio)")
@@ -889,16 +1242,14 @@ def process_inbox():
             print("         Localização:", extracted.get("localizacao") or "(vazio)")
             print("         Cargo pretendido:", extracted.get("cargo_pretendido") or "(vazio)")
             print("         Habilidades:", extracted.get("habilidades") or "(vazio)")
-            print("         Formações:", extracted.get("formacoes") or "(vazio)")
+            print("         Formação:", extracted.get("formacoes") or "(vazio)")
             print("         Email:", extracted.get("email") or "(vazio)")
             print("         Telefone:", extracted.get("telefone") or "(vazio)")
 
             has_any_data = any(
                 [
                     extracted.get("nome_completo"),
-                    extracted.get("idade"),
                     extracted.get("localizacao"),
-                    extracted.get("cargo_pretendido"),
                     extracted.get("habilidades"),
                     extracted.get("formacoes"),
                     extracted.get("email"),
@@ -908,7 +1259,7 @@ def process_inbox():
 
             if not has_any_data:
                 print(
-                    f"[EMAIL] Extração vazia para {file_path.name}. Linha NÃO será gravada na planilha."
+                    f"[EMAIL] Extração vazia para {file_path.name}. Linha NÃO será gravada."
                 )
                 continue
 
@@ -918,47 +1269,18 @@ def process_inbox():
                 level=level,
                 portfolio=portfolio,
                 extracted=extracted,
-                vacancy_title=vacancy_title,
+                explicit_sheet=explicit_sheet,
+                subject=subject,
             )
 
+        processed += 1
 
-
-def convert_to_pdf_if_possible(file_path: Path) -> Path:
-    ext = file_path.suffix.lower()
-
-    if ext == ".pdf":
-        return file_path
-
-    if ext not in {".doc", ".docx"}:
-        return file_path
-
-    try:
-        output_dir = file_path.parent
-        subprocess.run(
-            [
-                "soffice",
-                "--headless",
-                "--convert-to",
-                "pdf",
-                str(file_path),
-                "--outdir",
-                str(output_dir),
-            ],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
-        pdf_path = file_path.with_suffix(".pdf")
-
-        if pdf_path.exists():
-            print(f"[EMAIL] Convertido para PDF: {pdf_path.name}")
-            return pdf_path
-
-    except Exception as e:
-        print(f"[EMAIL] Falha ao converter PDF: {file_path.name} | {e}")
-
-    return file_path            
+    print("\n[EMAIL] Processamento concluído.")
+    print("[EMAIL] Emails avaliados:", len(mail_ids))
+    print("[EMAIL] Emails processados:", processed)
+    print("[EMAIL] Emails com currículo:", with_resume)
+    print("[EMAIL] Emails ignorados:", ignored)
+    print("[EMAIL] Emails com currículo sem vaga explícita:", no_explicit_role)
 
 
 if __name__ == "__main__":

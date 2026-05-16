@@ -10,6 +10,8 @@ from typing import Any
 
 from openpyxl import Workbook, load_workbook
 
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+
 
 DEFAULT_DRIVE_ROOT = Path(
     os.getenv("STARIA_DRIVE_ROOT", r"G:\Drives compartilhados\STARMKT\StarIA")
@@ -29,7 +31,34 @@ DEFAULT_REFINED_XLSX = Path(
     )
 )
 
-VISIBLE_SYSTEM_HEADERS = ["ID", "Nota"]
+
+CANONICAL_SHEETS = [
+    "EXECUTIVO DE CONTAS",
+    "ATENDIMENTO",
+    "COORDENADOR DE CONTEÚDO",
+    "DIRETOR DE ARTE BRANDING",
+    "DIRETOR DE ARTE DIGITAL",
+    "DIRETOR DE ARTE INSTITUCIONAL",
+    "DIAGRAMADOR",
+    "PLAN. PERFORMANCE & GROWTH",
+    "PLANEJAMENTO ESTRATÉGICO",
+    "MOTION DESIGNER",
+    "REDATOR",
+]
+
+VISIBLE_HEADERS = [
+    "ID",
+    "Nota",
+    "Nome completo",
+    "Localização",
+    "Cargo pretendido",
+    "Nível",
+    "Portfólio",
+    "Habilidades",
+    "Formação",
+    "Email",
+    "Telefone",
+]
 
 TECHNICAL_HEADERS = [
     "Caminho do currículo",
@@ -46,16 +75,29 @@ TECHNICAL_HEADERS = [
     "Flags de risco",
 ]
 
+SHEET_DISPLAY_TITLES = {
+    "EXECUTIVO DE CONTAS": "Executivo de Contas",
+    "ATENDIMENTO": "Atendimento",
+    "COORDENADOR DE CONTEÚDO": "Coordenador de Conteúdo",
+    "DIRETOR DE ARTE BRANDING": "Diretor de Arte Branding",
+    "DIRETOR DE ARTE DIGITAL": "Diretor de Arte Digital",
+    "DIRETOR DE ARTE INSTITUCIONAL": "Diretor de Arte Institucional",
+    "DIAGRAMADOR": "Diagramador",
+    "PLAN. PERFORMANCE & GROWTH": "Plan. Performance & Growth",
+    "PLANEJAMENTO ESTRATÉGICO": "Planejamento Estratégico",
+    "MOTION DESIGNER": "Motion Designer",
+    "REDATOR": "Redator",
+}
+
 FALLBACK_REFINED_HEADERS = [
     "Nota",
     "Nome completo",
-    "Idade",
     "Localização",
     "Cargo pretendido",
     "Nível",
     "Portfólio",
     "Habilidades",
-    "Formações", 
+    "Formação",
     "Email",
     "Telefone",
 ]
@@ -63,8 +105,14 @@ FALLBACK_REFINED_HEADERS = [
 HEADER_ALIASES = {
     "Nome ": "Nome completo",
     "Nome": "Nome completo",
+    "Nome Completo": "Nome completo",
+    "Nome completo": "Nome completo",
     "Localizacao": "Localização",
+    "Localização": "Localização",
+    "Cargo Pretendido": "Cargo pretendido",
+    "Cargo pretendido": "Cargo pretendido",
     "Nivel": "Nível",
+    "Nível": "Nível",
     "Habilidades/Experiência": "Habilidades",
     "Habilidades / Experiência": "Habilidades",
     "Experiência": "Habilidades",
@@ -72,9 +120,18 @@ HEADER_ALIASES = {
     "Competências": "Habilidades",
     "Competencias": "Habilidades",
     "Portfolio": "Portfólio",
+    "Portfólio": "Portfólio",
+    "Formações": "Formação",
+    "Formacao": "Formação",
+    "Formação": "Formação",
     "E-mail": "Email",
+    "Email": "Email",
+    "TELEFONE": "Telefone",
+    "Telefone": "Telefone",
     "Curriculo": "Caminho do currículo",
     "Currículo": "Caminho do currículo",
+    "COORDENADOR DE CONTEUDO": "COORDENADOR DE CONTEÚDO",
+    "PLAN. PERFORMANCE & GROW": "PLAN. PERFORMANCE & GROWTH",
 }
 
 
@@ -83,14 +140,35 @@ def safe_str(value: Any) -> str:
         return ""
     return re.sub(r"\s+", " ", str(value)).strip()
 
+def clean_excel_value(value: Any) -> Any:
+    if value is None:
+        return ""
+
+    if isinstance(value, str):
+        value = ILLEGAL_CHARACTERS_RE.sub("", value)
+        value = re.sub(r"\s+", " ", value).strip()
+
+        if value.startswith(("=", "+", "-", "@")):
+            value = "'" + value
+
+        return value
+
+    return value    
+
 
 def norm(value: Any) -> str:
     text = safe_str(value).lower()
     repl = {
-        "á": "a", "à": "a", "â": "a", "ã": "a",
-        "é": "e", "ê": "e",
+        "á": "a",
+        "à": "a",
+        "â": "a",
+        "ã": "a",
+        "é": "e",
+        "ê": "e",
         "í": "i",
-        "ó": "o", "ô": "o", "õ": "o",
+        "ó": "o",
+        "ô": "o",
+        "õ": "o",
         "ú": "u",
         "ç": "c",
     }
@@ -99,9 +177,94 @@ def norm(value: Any) -> str:
     return text
 
 
+def parse_score(value: Any) -> float:
+    text = safe_str(value).replace(",", ".")
+    try:
+        return float(text)
+    except Exception:
+        return 0.0
+
+
 def normalize_header(header: Any) -> str:
     h = safe_str(header)
     return HEADER_ALIASES.get(h, h)
+
+
+def normalize_sheet_name(sheet_name: Any) -> str:
+    raw = safe_str(sheet_name)
+    mapped = HEADER_ALIASES.get(raw, raw)
+    n = norm(mapped)
+
+    for canonical in CANONICAL_SHEETS:
+        if norm(canonical) == n:
+            return canonical
+
+    if "coordenador" in n and "conteudo" in n:
+        return "COORDENADOR DE CONTEÚDO"
+
+    if "planejamento" in n and ("performance" in n or "growth" in n or "grow" in n):
+        return "PLAN. PERFORMANCE & GROWTH"
+
+    return raw
+
+
+def sheet_display_title(sheet_name: str) -> str:
+    sheet_name = normalize_sheet_name(sheet_name)
+    return SHEET_DISPLAY_TITLES.get(sheet_name, safe_str(sheet_name).title())
+
+
+def normalize_role_to_sheet_name(role: str) -> str:
+    r = norm(role)
+
+    if not r:
+        return "EXECUTIVO DE CONTAS"
+
+    if (
+        "diagramador" in r
+        or "diagramadora" in r
+        or "diagramacao" in r
+        or "tabloide" in r
+        or "tablóide" in r
+        or "ofertas" in r
+        or "encarte" in r
+    ):
+        return "DIAGRAMADOR"
+
+    if "diretor" in r and "arte" in r and (
+        "branding" in r or "identidade" in r or "produto" in r
+    ):
+        return "DIRETOR DE ARTE BRANDING"
+
+    if "diretor" in r and "arte" in r and (
+        "digital" in r or "performance" in r or "marketplace" in r
+    ):
+        return "DIRETOR DE ARTE DIGITAL"
+
+    if "diretor" in r and "arte" in r:
+        return "DIRETOR DE ARTE INSTITUCIONAL"
+
+    if "performance" in r or "growth" in r or "grow" in r:
+        return "PLAN. PERFORMANCE & GROWTH"
+
+    if "estrategista" in r or "planejamento" in r:
+        return "PLANEJAMENTO ESTRATÉGICO"
+
+    if "motion" in r:
+        return "MOTION DESIGNER"
+
+    if "redator" in r or "copywriter" in r or "copy" == r:
+        return "REDATOR"
+
+    if "conteudo" in r or "conteúdo" in r or "social media" in r:
+        return "COORDENADOR DE CONTEÚDO"
+
+    if "atendimento" in r or "account manager" in r or "relacionamento" in r:
+        return "ATENDIMENTO"
+
+    if "executivo" in r or "contas" in r or "comercial" in r:
+        return "EXECUTIVO DE CONTAS"
+
+    return "EXECUTIVO DE CONTAS"
 
 
 def get_headers(ws) -> list[str]:
@@ -158,7 +321,7 @@ def load_or_create_workbook(path: Path):
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "BancoTalentos"
+    ws.title = CANONICAL_SHEETS[0]
     return wb
 
 
@@ -183,9 +346,6 @@ def get_refined_sheet_headers(template_ws) -> list[str]:
     if not headers:
         headers = FALLBACK_REFINED_HEADERS.copy()
 
-    if "Nota" not in headers:
-        headers = ["Nota"] + headers
-
     seen = set()
     deduped = []
     for h in headers:
@@ -196,19 +356,30 @@ def get_refined_sheet_headers(template_ws) -> list[str]:
     return deduped
 
 
-def build_bank_headers(refined_headers: list[str]) -> list[str]:
-    visible_headers = [h for h in refined_headers if h and h != "ID"]
-
-    if "Nota" in visible_headers:
-        visible_headers = [h for h in visible_headers if h != "Nota"]
-
-    headers = ["ID", "Nota"] + visible_headers
+def build_bank_headers(refined_headers: list[str] | None = None) -> list[str]:
+    headers = VISIBLE_HEADERS.copy()
 
     for h in TECHNICAL_HEADERS:
         if h not in headers:
             headers.append(h)
 
     return headers
+
+
+def normalize_row_data(row: dict[str, Any]) -> dict[str, Any]:
+    out = {}
+
+    for key, value in row.items():
+        normalized_key = normalize_header(key)
+        out[normalized_key] = value
+
+    if safe_str(out.get("Formações")) and not safe_str(out.get("Formação")):
+        out["Formação"] = out.get("Formações")
+
+    if safe_str(out.get("Nome Completo")) and not safe_str(out.get("Nome completo")):
+        out["Nome completo"] = out.get("Nome Completo")
+
+    return out
 
 
 def extract_rows_from_workbook(wb) -> list[dict[str, Any]]:
@@ -222,7 +393,7 @@ def extract_rows_from_workbook(wb) -> list[dict[str, Any]]:
         headers = get_headers(ws)
 
         for row in ws.iter_rows(min_row=2, values_only=True):
-            item = {"_source_sheet": ws.title}
+            item = {"_source_sheet": normalize_sheet_name(ws.title)}
             has_any = False
 
             for idx, val in enumerate(row):
@@ -238,43 +409,81 @@ def extract_rows_from_workbook(wb) -> list[dict[str, Any]]:
                     has_any = True
 
             if has_any:
-                rows.append(item)
+                rows.append(normalize_row_data(item))
 
     return rows
 
 
+def duplicate_key_from_row(row: dict[str, Any]) -> str:
+    row = normalize_row_data(row)
+
+    email = normalize_duplicate_key(row.get("Email"))
+    phone = normalize_phone(row.get("Telefone"))
+    name = normalize_duplicate_key(row.get("Nome completo"))
+    role = normalize_duplicate_key(row.get("Cargo pretendido"))
+    resume = normalize_duplicate_key(row.get("Nome do arquivo") or row.get("Caminho do currículo"))
+
+    if email and role:
+        return f"email:{email}|role:{role}"
+
+    if phone and len(phone) >= 8 and role:
+        return f"phone:{phone}|role:{role}"
+
+    if name and role:
+        return f"name:{name}|role:{role}"
+
+    if resume:
+        return f"resume:{resume}"
+
+    return f"row:{name}|{phone}|{email}|{role}|{resume}"
+
+
+def merge_row_values(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    base = normalize_row_data(base)
+    incoming = normalize_row_data(incoming)
+
+    base_score = parse_score(base.get("Nota"))
+    incoming_score = parse_score(incoming.get("Nota"))
+
+    if incoming_score > base_score:
+        primary = incoming.copy()
+        secondary = base
+    else:
+        primary = base.copy()
+        secondary = incoming
+
+    for key, value in secondary.items():
+        if key.startswith("_"):
+            continue
+        if safe_str(value) and not safe_str(primary.get(key)):
+            primary[key] = value
+
+    return primary
+
+
 def merge_duplicate_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen = {}
+    seen: dict[str, dict[str, Any]] = {}
     ordered_keys = []
 
     for row in rows:
-        key = (
-            safe_str(row.get("ID"))
-            or safe_str(row.get("Caminho do currículo"))
-            or safe_str(row.get("Email"))
-            or safe_str(row.get("Nome completo")) + "|" + safe_str(row.get("Telefone"))
-        )
-
-        if not key:
-            key = f"row_{len(ordered_keys) + 1}"
+        row = normalize_row_data(row)
+        key = duplicate_key_from_row(row)
 
         if key not in seen:
             seen[key] = row
             ordered_keys.append(key)
             continue
 
-        current = seen[key]
-        for k, v in row.items():
-            if k.startswith("_"):
-                continue
-            if safe_str(v) and not safe_str(current.get(k)):
-                current[k] = v
+        seen[key] = merge_row_values(seen[key], row)
 
     return [seen[k] for k in ordered_keys]
 
 
 def copy_template_dimensions(target_ws, target_headers: list[str], template_ws=None) -> None:
     if template_ws is None:
+        for idx, header in enumerate(target_headers, start=1):
+            letter = target_ws.cell(row=1, column=idx).column_letter
+            target_ws.column_dimensions[letter].width = 22
         return
 
     template_headers = get_headers(template_ws)
@@ -293,8 +502,7 @@ def copy_template_dimensions(target_ws, target_headers: list[str], template_ws=N
             src_letter = src_cell.column_letter
 
         width = template_ws.column_dimensions[src_letter].width
-        if width:
-            target_ws.column_dimensions[target_letter].width = width
+        target_ws.column_dimensions[target_letter].width = width or 22
 
     for header in TECHNICAL_HEADERS:
         if header in target_headers:
@@ -337,11 +545,17 @@ def apply_body_row_style(target_ws, row_idx: int, target_headers: list[str], tem
         src = None
 
         if header == "ID":
-            src = template_ws.cell(row=template_row, column=first_non_empty_header_cell(template_ws).column)
+            src = template_ws.cell(
+                row=template_row,
+                column=first_non_empty_header_cell(template_ws).column,
+            )
         elif header in template_headers:
             src = template_ws.cell(row=template_row, column=template_headers.index(header) + 1)
         else:
-            src = template_ws.cell(row=template_row, column=first_non_empty_header_cell(template_ws).column)
+            src = template_ws.cell(
+                row=template_row,
+                column=first_non_empty_header_cell(template_ws).column,
+            )
 
         copy_cell_style(src, dst)
 
@@ -354,6 +568,7 @@ def clear_and_write_sheet(ws, headers: list[str], rows: list[dict[str, Any]], te
     apply_header_styles(ws, headers, template_ws)
 
     for row_data in rows:
+        row_data = normalize_row_data(row_data)
         ws.append([row_data.get(h, "") for h in headers])
         apply_body_row_style(ws, ws.max_row, headers, template_ws)
 
@@ -398,12 +613,12 @@ def canonical_sheet_rules() -> dict[str, list[str]]:
     return {
         "EXECUTIVO DE CONTAS": ["executivo de contas", "account executive", "executivo comercial"],
         "ATENDIMENTO": ["atendimento", "account manager", "relacionamento", "cliente interno"],
-        "COORDENADOR DE CONTEUDO": ["coordenador de conteudo", "coordenador de conteúdo", "conteudo", "conteúdo", "social media", "editorial"],
+        "COORDENADOR DE CONTEÚDO": ["coordenador de conteudo", "coordenador de conteúdo", "conteudo", "conteúdo", "social media", "editorial"],
         "DIRETOR DE ARTE BRANDING": ["diretor de arte branding", "branding", "identidade visual", "brand", "marca"],
         "DIRETOR DE ARTE DIGITAL": ["diretor de arte digital", "da digital", "performance digital", "marketplace", "ecommerce", "e-commerce"],
         "DIRETOR DE ARTE INSTITUCIONAL": ["diretor de arte institucional", "campanhas institucionais", "institucional", "diretor de arte", "designer grafico senior", "designer gráfico sênior"],
         "DIAGRAMADOR": ["diagramador", "diagramadora", "diagramação", "diagramacao", "tabloide", "tablóide", "ofertas", "encarte"],
-        "PLANEJAMENTO PERFORMANCE & GROW": ["performance", "growth", "google ads", "meta ads", "analytics", "tiktok ads"],
+        "PLAN. PERFORMANCE & GROWTH": ["performance", "growth", "grow", "google ads", "meta ads", "analytics", "tiktok ads"],
         "PLANEJAMENTO ESTRATÉGICO": ["estrategista", "planejamento estrategico", "planejamento estratégico", "brand strategy"],
         "MOTION DESIGNER": ["motion", "motion designer", "after effects", "premiere", "animação", "animacao"],
         "REDATOR": ["redator", "redatora", "copywriter", "copy", "redação", "redacao"],
@@ -411,15 +626,17 @@ def canonical_sheet_rules() -> dict[str, list[str]]:
 
 
 def choose_sheet_name(sheet_names: list[str], row: dict[str, Any]) -> str:
+    normalized_sheet_names = [normalize_sheet_name(s) for s in sheet_names]
+
     direct_role_to_sheet = {
         "executivo_de_contas": "EXECUTIVO DE CONTAS",
         "atendimento_senior": "ATENDIMENTO",
-        "coordenador_conteudo": "COORDENADOR DE CONTEUDO",
+        "coordenador_conteudo": "COORDENADOR DE CONTEÚDO",
         "diretor_arte_senior_branding_produto": "DIRETOR DE ARTE BRANDING",
         "diretor_arte_senior_digital": "DIRETOR DE ARTE DIGITAL",
         "diretor_arte_senior_campanhas": "DIRETOR DE ARTE INSTITUCIONAL",
         "diagramador_ofertas": "DIAGRAMADOR",
-        "performance_growth_planejamento": "PLANEJAMENTO PERFORMANCE & GROW",
+        "performance_growth_planejamento": "PLAN. PERFORMANCE & GROWTH",
         "estrategista_senior_planejamento": "PLANEJAMENTO ESTRATÉGICO",
         "motion_designer": "MOTION DESIGNER",
         "redator_digital": "REDATOR",
@@ -428,8 +645,16 @@ def choose_sheet_name(sheet_names: list[str], row: dict[str, Any]) -> str:
     role_id = safe_str(row.get("Role ID sugerido"))
     if role_id in direct_role_to_sheet:
         target = direct_role_to_sheet[role_id]
-        if target in sheet_names:
+        if target in normalized_sheet_names:
             return target
+
+    cargo_sheet = normalize_role_to_sheet_name(safe_str(row.get("Cargo pretendido")))
+    if cargo_sheet in normalized_sheet_names:
+        return cargo_sheet
+
+    title_sheet = normalize_role_to_sheet_name(safe_str(row.get("Título normalizado")))
+    if title_sheet in normalized_sheet_names:
+        return title_sheet
 
     haystack = norm(
         " | ".join(
@@ -438,7 +663,6 @@ def choose_sheet_name(sheet_names: list[str], row: dict[str, Any]) -> str:
                 safe_str(row.get("Título normalizado")),
                 safe_str(row.get("Cargo pretendido")),
                 safe_str(row.get("Habilidades")),
-                safe_str(row.get("Habilidades/Experiência")),
                 safe_str(row.get("Observações")),
             ]
         )
@@ -449,7 +673,7 @@ def choose_sheet_name(sheet_names: list[str], row: dict[str, Any]) -> str:
     best_sheet = ""
     best_score = 0
 
-    for sheet_name in sheet_names:
+    for sheet_name in normalized_sheet_names:
         aliases = rules.get(sheet_name, [])
         score = sum(1 for alias in aliases if norm(alias) in haystack)
 
@@ -460,21 +684,23 @@ def choose_sheet_name(sheet_names: list[str], row: dict[str, Any]) -> str:
     if best_sheet:
         return best_sheet
 
-    source_sheet = safe_str(row.get("_source_sheet"))
-    if source_sheet in sheet_names:
+    source_sheet = normalize_sheet_name(row.get("_source_sheet"))
+    if source_sheet in normalized_sheet_names:
         return source_sheet
 
-    return sheet_names[0]
+    return CANONICAL_SHEETS[0]
 
 
 def redistribute_rows_by_sheet(
     rows: list[dict[str, Any]],
     sheet_names: list[str],
 ) -> dict[str, list[dict[str, Any]]]:
-    buckets = {name: [] for name in sheet_names}
+    buckets = {normalize_sheet_name(name): [] for name in sheet_names}
 
     for row in rows:
-        sheet_name = choose_sheet_name(sheet_names, row)
+        row = normalize_row_data(row)
+        sheet_name = choose_sheet_name(list(buckets.keys()), row)
+        row["Cargo pretendido"] = sheet_display_title(sheet_name)
         buckets.setdefault(sheet_name, []).append(row)
 
     return buckets
@@ -501,17 +727,21 @@ def ensure_bank_workbook_structure(
 
     wb_ref = get_refined_workbook(refined_path)
 
-    if wb_ref is not None:
-        target_sheet_names = wb_ref.sheetnames
-    else:
-        target_sheet_names = ["BancoTalentos"]
+    target_sheet_names = CANONICAL_SHEETS.copy()
 
-    if not target_sheet_names:
-        target_sheet_names = ["BancoTalentos"]
-
+    # Remove abas fora do padrão canônico depois de preservar as linhas.
     for sheet_name in list(wb_bank.sheetnames):
-        if sheet_name not in target_sheet_names:
+        if normalize_sheet_name(sheet_name) not in target_sheet_names:
             del wb_bank[sheet_name]
+
+    # Renomeia abas antigas equivalentes para o padrão canônico.
+    for sheet_name in list(wb_bank.sheetnames):
+        normalized = normalize_sheet_name(sheet_name)
+        if normalized != sheet_name and normalized in target_sheet_names:
+            if normalized not in wb_bank.sheetnames:
+                wb_bank[sheet_name].title = normalized
+            else:
+                del wb_bank[sheet_name]
 
     for sheet_name in target_sheet_names:
         if sheet_name not in wb_bank.sheetnames:
@@ -520,16 +750,21 @@ def ensure_bank_workbook_structure(
     if "Sheet" in wb_bank.sheetnames and len(wb_bank.sheetnames) > 1:
         del wb_bank["Sheet"]
 
-    buckets = redistribute_rows_by_sheet(existing_rows, target_sheet_names) if redistribute_existing else {
-        target_sheet_names[0]: existing_rows
-    }
+    buckets = (
+        redistribute_rows_by_sheet(existing_rows, target_sheet_names)
+        if redistribute_existing
+        else {target_sheet_names[0]: existing_rows}
+    )
 
     for sheet_name in target_sheet_names:
         ws = wb_bank[sheet_name]
-        template_ws = wb_ref[sheet_name] if wb_ref is not None and sheet_name in wb_ref.sheetnames else None
+        template_ws = (
+            wb_ref[sheet_name]
+            if wb_ref is not None and sheet_name in wb_ref.sheetnames
+            else None
+        )
 
-        refined_headers = get_refined_sheet_headers(template_ws)
-        headers = build_bank_headers(refined_headers)
+        headers = build_bank_headers(None)
 
         clear_and_write_sheet(ws, headers, buckets.get(sheet_name, []), template_ws)
 
@@ -545,7 +780,6 @@ def ensure_bank_workbook_structure(
     }
 
 
-
 def normalize_duplicate_key(value: Any) -> str:
     text = norm(safe_str(value))
     text = re.sub(r"[^a-z0-9@./+-]", "", text)
@@ -557,13 +791,17 @@ def normalize_phone(value: Any) -> str:
 
 
 def is_duplicate_candidate(existing_rows: list[dict[str, Any]], values: dict[str, Any]) -> bool:
-    new_email = normalize_duplicate_key(values.get("Email"))
-    new_phone = normalize_phone(values.get("Telefone"))
-    new_resume_name = normalize_duplicate_key(values.get("Nome do arquivo"))
-    new_name = normalize_duplicate_key(values.get("Nome completo"))
-    new_role = normalize_duplicate_key(values.get("Cargo pretendido"))
+    new_values = normalize_row_data(values)
+
+    new_email = normalize_duplicate_key(new_values.get("Email"))
+    new_phone = normalize_phone(new_values.get("Telefone"))
+    new_resume_name = normalize_duplicate_key(new_values.get("Nome do arquivo"))
+    new_name = normalize_duplicate_key(new_values.get("Nome completo"))
+    new_role = normalize_duplicate_key(new_values.get("Cargo pretendido"))
 
     for row in existing_rows:
+        row = normalize_row_data(row)
+
         old_email = normalize_duplicate_key(row.get("Email"))
         old_phone = normalize_phone(row.get("Telefone"))
         old_resume_name = normalize_duplicate_key(row.get("Nome do arquivo"))
@@ -573,10 +811,16 @@ def is_duplicate_candidate(existing_rows: list[dict[str, Any]], values: dict[str
         if new_email and old_email and new_email == old_email and new_role == old_role:
             return True
 
-        if new_phone and old_phone and len(new_phone) >= 8 and new_phone == old_phone and new_role == old_role:
+        if (
+            new_phone
+            and old_phone
+            and len(new_phone) >= 8
+            and new_phone == old_phone
+            and new_role == old_role
+        ):
             return True
 
-        if new_resume_name and old_resume_name and new_resume_name == old_resume_name and new_role == old_role:
+        if new_resume_name and old_resume_name and new_resume_name == old_resume_name:
             return True
 
         if new_name and old_name and new_name == old_name and new_role == old_role:
@@ -589,8 +833,11 @@ def append_candidate_record(
     values: dict[str, Any],
     banco_path: Path = DEFAULT_BANCO_TALENTOS_XLSX,
     refined_path: Path = DEFAULT_REFINED_XLSX,
+    target_sheet: str | None = None,
 ) -> str:
-    if not Path(banco_path).exists():
+    banco_path = Path(banco_path)
+
+    if not banco_path.exists():
         ensure_bank_workbook_structure(
             banco_path=banco_path,
             refined_path=refined_path,
@@ -601,21 +848,44 @@ def append_candidate_record(
     wb = load_workbook(banco_path)
     all_existing_rows = extract_rows_from_workbook(wb)
 
+    values = normalize_row_data(dict(values))
+
+    sheet_name = normalize_sheet_name(target_sheet) if target_sheet else choose_sheet_name(wb.sheetnames, values)
+
+    if sheet_name not in wb.sheetnames:
+        sheet_name = choose_sheet_name(wb.sheetnames, values)
+
+    values["Cargo pretendido"] = sheet_display_title(sheet_name)
+
     if is_duplicate_candidate(all_existing_rows, values):
         print(
             "[TALENT BANK] Candidato duplicado detectado. Registro ignorado:",
             values.get("Nome completo") or values.get("Email") or values.get("Nome do arquivo"),
         )
         return "DUPLICADO"
-    
+
     candidate_id = safe_str(values.get("ID")) or get_next_candidate_id_from_rows(all_existing_rows)
 
-    values = dict(values)
     values["ID"] = candidate_id
 
-    sheet_name = choose_sheet_name(wb.sheetnames, values)
     ws = wb[sheet_name]
     header_map = build_header_map(ws)
+
+    # Garante headers canônicos mesmo se a aba veio irregular.
+    expected_headers = build_bank_headers(None)
+    current_headers = get_headers(ws)
+    if current_headers[: len(expected_headers)] != expected_headers:
+        existing_sheet_rows = extract_rows_from_workbook(wb)
+        wb.save(banco_path)
+        ensure_bank_workbook_structure(
+            banco_path=banco_path,
+            refined_path=refined_path,
+            create_backup=False,
+            redistribute_existing=True,
+        )
+        wb = load_workbook(banco_path)
+        ws = wb[sheet_name]
+        header_map = build_header_map(ws)
 
     ws.insert_rows(2, amount=1)
 
@@ -624,7 +894,7 @@ def append_candidate_record(
             copy_cell_style(ws.cell(row=3, column=col), ws.cell(row=2, column=col))
 
     for header, col in header_map.items():
-        ws.cell(row=2, column=col, value=values.get(header, ""))
+        ws.cell(row=2, column=col, value=clean_excel_value(values.get(header, "")))
 
     wb.save(banco_path)
     return candidate_id
@@ -655,13 +925,15 @@ def find_rows_missing_core_fields(
             if not has_any:
                 continue
 
+            row_data = normalize_row_data(row_data)
+
             missing_name = not safe_str(row_data.get("Nome completo"))
-            missing_age = not safe_str(row_data.get("Idade"))
             missing_location = not safe_str(row_data.get("Localização"))
+            missing_phone = not safe_str(row_data.get("Telefone"))
 
             has_curriculum = bool(safe_str(row_data.get("Caminho do currículo")))
 
-            if has_curriculum and (missing_name or missing_age or missing_location):
+            if has_curriculum and (missing_name or missing_location or missing_phone):
                 missing.append(row_data)
 
     return missing
@@ -676,11 +948,14 @@ def update_candidate_row(
 ) -> None:
     wb = load_workbook(banco_path)
 
+    sheet_name = normalize_sheet_name(sheet_name)
+
     if sheet_name not in wb.sheetnames:
         raise RuntimeError(f"Aba não encontrada: {sheet_name}")
 
     ws = wb[sheet_name]
     header_map = build_header_map(ws)
+    updates = normalize_row_data(updates)
 
     for header, value in updates.items():
         header = normalize_header(header)
