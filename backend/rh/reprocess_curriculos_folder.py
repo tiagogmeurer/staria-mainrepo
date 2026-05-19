@@ -169,6 +169,7 @@ def reprocess_curriculos_folder(
                 requested_role=requested_role,
                 extra_query=f"{requested_role} {sheet_display_title(target_sheet)}",
             )
+            
 
             nota = int(match.get("nota", 0) or 0)
             best = match.get("best") or {}
