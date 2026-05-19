@@ -921,41 +921,49 @@ def extract_level_from_text(text: str) -> str:
 
 
 def infer_candidate_level(
-    subject: str = "", body: str = "", curriculum_text: str = ""
+    subject: str = "",
+    body: str = "",
+    curriculum_text: str = "",
+    explicit_sheet: str = "",
 ) -> str:
-    # prioridade 1: título do email
     level = extract_level_from_text(subject)
     if level:
         return level
 
-    # prioridade 2: corpo do email
     level = extract_level_from_text(body)
     if level:
         return level
 
-    # prioridade 3: currículo
     level = extract_level_from_text(curriculum_text)
     if level:
         return level
 
     text = normalize_text(curriculum_text)
-
     years = []
-    for m in re.finditer(r"(\d{1,2})\s*(?:anos|ano)\s+de\s+experi[eê]ncia", text):
-        try:
-            years.append(int(m.group(1)))
-        except Exception:
-            pass
+
+    patterns = [
+        r"(\d{1,2})\s*(?:anos|ano)\s+de\s+experi[eê]ncia",
+        r"experi[eê]ncia\s+de\s+(\d{1,2})\s*(?:anos|ano)",
+        r"mais\s+de\s+(\d{1,2})\s*(?:anos|ano)",
+        r"(\d{1,2})\+\s*(?:anos|ano)",
+    ]
+
+    for pattern in patterns:
+        for m in re.finditer(pattern, text):
+            try:
+                years.append(int(m.group(1)))
+            except Exception:
+                pass
 
     if years:
         max_years = max(years)
-        if max_years >= 5:
-            return "Sênior"
-        if max_years >= 2:
+        if max_years < 2:
+            return "Júnior"
+        if max_years <= 5:
             return "Pleno"
-        return "Júnior"
+        return "Sênior"
 
-    return ""
+    return "Pleno"
 
 
 def extract_job_title_from_subject(subject: str) -> str:
