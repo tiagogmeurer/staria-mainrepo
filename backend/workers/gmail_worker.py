@@ -25,7 +25,9 @@ from pypdf import PdfReader
 BASE_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(BASE_DIR))
 
-from datasets.professional_profiles.matching_engine import score_candidate_against_profiles
+from datasets.professional_profiles.matching_engine import (
+    score_candidate_against_profiles,
+)
 from rh.talent_bank_workbook import (
     CANONICAL_SHEETS,
     append_candidate_record,
@@ -35,7 +37,6 @@ from rh.talent_bank_workbook import (
     normalize_role_to_sheet_name,
     sheet_display_title,
 )
-
 
 # =========================
 # LOAD .ENV DO BACKEND
@@ -119,6 +120,7 @@ MOVE_REJECTED_UNDER_MIN_SCORE = os.getenv(
 # UTILS
 # =========================
 
+
 def decode_mime_words(s: str) -> str:
     if not s:
         return ""
@@ -184,8 +186,7 @@ def validate_config():
 
     if not EMAIL_PASSWORD:
         raise RuntimeError(
-            "STARIA_EMAIL_PASSWORD não definido no .env "
-            f"({BASE_DIR / '.env'})"
+            "STARIA_EMAIL_PASSWORD não definido no .env " f"({BASE_DIR / '.env'})"
         )
 
 
@@ -226,6 +227,7 @@ def extract_portfolio_regex(text: str) -> str:
 # =========================
 # TALENT BANK RESET
 # =========================
+
 
 def clear_talent_bank_data_rows():
     print("[EMAIL] Limpando dados da planilha mantendo abas, headers e estrutura...")
@@ -273,6 +275,7 @@ def clear_talent_bank_data_rows():
 # EMAIL BODY
 # =========================
 
+
 def extract_email_body(msg) -> str:
     body = ""
 
@@ -312,6 +315,7 @@ def extract_email_body(msg) -> str:
 # EXTRACT NÍVEL / PORTFOLIO
 # =========================
 
+
 def extract_level(email_body: str) -> str:
     if not email_body:
         return ""
@@ -338,6 +342,99 @@ def extract_level(email_body: str) -> str:
     return ""
 
 
+def infer_candidate_level(
+    subject: str = "",
+    body: str = "",
+    curriculum_text: str = "",
+    explicit_sheet: str = "",
+) -> str:
+    text = normalize_text(" ".join([subject or "", body or "", curriculum_text or ""]))
+
+    # 1) Indício explícito no assunto/corpo/currículo
+    senior_patterns = [
+        r"\bsenior\b",
+        r"\bs[eê]nior\b",
+        r"\bsr\b",
+        r"\bsr\.",
+        r"\bespecialista\b",
+        r"\bcoordena[cç][aã]o\b",
+        r"\bcoordenador\b",
+        r"\bcoordenadora\b",
+        r"\bdiretor\b",
+        r"\bdiretora\b",
+        r"\bgerente\b",
+    ]
+
+    pleno_patterns = [
+        r"\bpleno\b",
+        r"\bpl\b",
+        r"\bpl\.",
+    ]
+
+    junior_patterns = [
+        r"\bjunior\b",
+        r"\bj[uú]nior\b",
+        r"\bjr\b",
+        r"\bjr\.",
+        r"\bestagio\b",
+        r"\best[aá]gio\b",
+        r"\bestagiario\b",
+        r"\bestagi[aá]rio\b",
+        r"\bassistente\b",
+        r"\bauxiliar\b",
+    ]
+
+    for pattern in senior_patterns:
+        if re.search(pattern, text):
+            return "Sênior"
+
+    for pattern in pleno_patterns:
+        if re.search(pattern, text):
+            return "Pleno"
+
+    for pattern in junior_patterns:
+        if re.search(pattern, text):
+            return "Júnior"
+
+    # 2) Experiência por anos explícitos
+    years = []
+
+    for m in re.finditer(r"(\d{1,2})\s*(?:anos|ano)\s+de\s+experi[eê]ncia", text):
+        try:
+            years.append(int(m.group(1)))
+        except Exception:
+            pass
+
+    for m in re.finditer(r"experi[eê]ncia\s+de\s+(\d{1,2})\s*(?:anos|ano)", text):
+        try:
+            years.append(int(m.group(1)))
+        except Exception:
+            pass
+
+    if years:
+        max_years = max(years)
+
+        if max_years >= 5:
+            return "Sênior"
+
+        if max_years >= 2:
+            return "Pleno"
+
+        return "Júnior"
+
+    # 3) Alguns cargos do dataset já são naturalmente sênior
+    if explicit_sheet in {
+        "DIRETOR DE ARTE BRANDING",
+        "DIRETOR DE ARTE DIGITAL",
+        "DIRETOR DE ARTE INSTITUCIONAL",
+        "ATENDIMENTO",
+    }:
+        if "senior" in text or "sênior" in text or "sr" in text:
+            return "Sênior"
+
+    return ""
+
+
 def extract_portfolio(email_body: str) -> str:
     if not email_body:
         return ""
@@ -359,6 +456,7 @@ def extract_portfolio(email_body: str) -> str:
 # CONNECT MAILBOX
 # =========================
 
+
 def connect_mailbox():
     validate_config()
     ensure_paths()
@@ -370,7 +468,10 @@ def connect_mailbox():
     print("[EMAIL] BANCO_TALENTOS_XLSX =", BANCO_TALENTOS_XLSX)
     print("[EMAIL] STARIA_API_BASE =", STARIA_API_BASE)
     print("[EMAIL] REPROCESS_ALL_EMAILS =", REPROCESS_ALL_EMAILS)
-    print("[EMAIL] RESET_TALENT_BANK_BEFORE_REPROCESS =", RESET_TALENT_BANK_BEFORE_REPROCESS)
+    print(
+        "[EMAIL] RESET_TALENT_BANK_BEFORE_REPROCESS =",
+        RESET_TALENT_BANK_BEFORE_REPROCESS,
+    )
     print("[EMAIL] EMAIL_LIMIT =", EMAIL_LIMIT if EMAIL_LIMIT else "sem limite")
     print("[EMAIL] MIN_SCORE =", MIN_SCORE)
 
@@ -384,6 +485,7 @@ def connect_mailbox():
 # =========================
 # FILE HASH / INDEX
 # =========================
+
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -437,6 +539,7 @@ def existing_file_by_hash(file_hash: str, index: dict[str, str]) -> Path | None:
 # =========================
 # PDF CONVERSION / SAVE ATTACHMENTS
 # =========================
+
 
 def find_soffice() -> str:
     candidates = [
@@ -509,7 +612,9 @@ def build_attachment_safe_name(
 ) -> str:
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     original = sanitize_filename(filename)
-    vacancy = sanitize_filename(explicit_role or extract_job_title_from_subject(subject))
+    vacancy = sanitize_filename(
+        explicit_role or extract_job_title_from_subject(subject)
+    )
 
     if vacancy:
         return f"{timestamp}_{vacancy}_{original}"
@@ -558,7 +663,9 @@ def save_attachment(msg, subject: str = "", explicit_role: str = "") -> list[Pat
         filepath = CURRICULOS_DIR / safe_name
 
         if filepath.exists():
-            filepath = CURRICULOS_DIR / f"{filepath.stem}_{file_hash[:10]}{filepath.suffix}"
+            filepath = (
+                CURRICULOS_DIR / f"{filepath.stem}_{file_hash[:10]}{filepath.suffix}"
+            )
 
         with open(filepath, "wb") as f:
             f.write(payload)
@@ -594,7 +701,10 @@ def move_rejected_file(file_path: Path) -> Path:
     target = REJECTED_DIR / file_path.name
 
     if target.exists():
-        target = REJECTED_DIR / f"{file_path.stem}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}{file_path.suffix}"
+        target = (
+            REJECTED_DIR
+            / f"{file_path.stem}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}{file_path.suffix}"
+        )
 
     try:
         shutil.move(str(file_path), str(target))
@@ -606,6 +716,7 @@ def move_rejected_file(file_path: Path) -> Path:
 # =========================
 # TEXT EXTRACTION
 # =========================
+
 
 def extract_text_from_pdf(file_path: Path) -> str:
     try:
@@ -662,71 +773,119 @@ def extract_text_from_file(file_path: Path) -> str:
 # =========================
 
 ROLE_PATTERNS = [
-    ("DIAGRAMADOR", [
-        r"\bdiagramador(?:a)?\b",
-        r"\bdiagrama[cç][aã]o\b",
-        r"\btabloide\b",
-        r"\btabl[oó]ide\b",
-        r"\bencarte\b",
-        r"\bofertas\b",
-    ]),
-    ("ATENDIMENTO", [
-        r"\batendimento\b",
-        r"\batendimento\s+s[eê]nior\b",
-        r"\baccount\s+manager\b",
-        r"\brelacionamento\b",
-    ]),
-    ("COORDENADOR DE CONTEÚDO", [
-        r"\bcoordenador(?:a)?\s+de\s+conte[uú]do\b",
-        r"\bconte[uú]do\b",
-        r"\bsocial\s+media\b",
-    ]),
-    ("DIRETOR DE ARTE BRANDING", [
-        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bbranding\b",
-        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bidentidade\b",
-        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bproduto\b",
-        r"\bbranding\b",
-        r"\bidentidade\s+visual\b",
-    ]),
-    ("DIRETOR DE ARTE DIGITAL", [
-        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bdigital\b",
-        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bperformance\b",
-        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bmarketplace\b",
-    ]),
-    ("DIRETOR DE ARTE INSTITUCIONAL", [
-        r"\bdiretor(?:a)?\s+de\s+arte\b.*\binstitucional\b",
-        r"\bdiretor(?:a)?\s+de\s+arte\b.*\bcampanhas\b",
-        r"\bdiretor(?:a)?\s+de\s+arte\b",
-        r"\bdesigner\s+gr[aá]fico\b",
-    ]),
-    ("PLAN. PERFORMANCE & GROWTH", [
-        r"\bperformance\b",
-        r"\bgrowth\b",
-        r"\bgoogle\s+ads\b",
-        r"\bmeta\s+ads\b",
-        r"\btiktok\s+ads\b",
-        r"\banalytics\b",
-    ]),
-    ("PLANEJAMENTO ESTRATÉGICO", [
-        r"\bplanejamento\s+estrat[eé]gico\b",
-        r"\bestrategista\b",
-        r"\bplanejamento\b",
-    ]),
-    ("MOTION DESIGNER", [
-        r"\bmotion\b",
-        r"\bmotion\s+designer\b",
-        r"\banima[cç][aã]o\b",
-    ]),
-    ("REDATOR", [
-        r"\bredator(?:a)?\b",
-        r"\bcopywriter\b",
-        r"\breda[cç][aã]o\b",
-    ]),
-    ("EXECUTIVO DE CONTAS", [
-        r"\bexecutivo(?:a)?\s+de\s+contas\b",
-        r"\bexecutivo(?:a)?\s+comercial\b",
-        r"\baccount\s+executive\b",
-    ]),
+    (
+        "DIAGRAMADOR",
+        [
+            r"\bvaga\s+diagramador(?:a)?\b",
+            r"\bdiagramador(?:a)?\b",
+            r"\bdiagrama[cç][aã]o\b",
+            r"\btabloide\b",
+            r"\btabl[oó]ide\b",
+            r"\bencarte\b",
+            r"\bofertas\b",
+        ],
+    ),
+    (
+        "ATENDIMENTO",
+        [
+            r"\bvaga\s+atendimento\b",
+            r"\batendimento\b",
+            r"\batendimento\s+s[eê]nior\b",
+            r"\baccount\s+manager\b",
+            r"\brelacionamento\b",
+        ],
+    ),
+    (
+        "COORDENADOR DE CONTEÚDO",
+        [
+            r"\bvaga\s+designer\b",
+            r"\bvaga\s+marketing\b",
+            r"\bvaga\s+social\s+media\b",
+            r"\bcoordenador(?:a)?\s+de\s+conte[uú]do\b",
+            r"\bconte[uú]do\b",
+            r"\bsocial\s+media\b",
+            r"\bmarketing\b",
+            r"\bdesigner\s+gr[aá]fico\b",
+        ],
+    ),
+    (
+        "DIRETOR DE ARTE BRANDING",
+        [
+            r"\bvaga\s+diretor(?:a)?\s+de\s+arte.*branding\b",
+            r"\bdiretor(?:a)?\s+de\s+arte\b.*\bbranding\b",
+            r"\bdiretor(?:a)?\s+de\s+arte\b.*\bidentidade\b",
+            r"\bdiretor(?:a)?\s+de\s+arte\b.*\bproduto\b",
+        ],
+    ),
+    (
+        "DIRETOR DE ARTE DIGITAL",
+        [
+            r"\bvaga\s+diretor(?:a)?\s+de\s+arte.*digital\b",
+            r"\bdiretor(?:a)?\s+de\s+arte\b.*\bdigital\b",
+            r"\bdiretor(?:a)?\s+de\s+arte\b.*\bperformance\b",
+            r"\bdiretor(?:a)?\s+de\s+arte\b.*\bmarketplace\b",
+        ],
+    ),
+    (
+        "DIRETOR DE ARTE INSTITUCIONAL",
+        [
+            r"\bvaga\s+diretor(?:a)?\s+de\s+arte\b",
+            r"\bdiretor(?:a)?\s+de\s+arte\b.*\binstitucional\b",
+            r"\bdiretor(?:a)?\s+de\s+arte\b.*\bcampanhas\b",
+            r"\bdiretor(?:a)?\s+de\s+arte\b",
+        ],
+    ),
+    (
+        "PLAN. PERFORMANCE & GROWTH",
+        [
+            r"\bvaga\s+planejamento\s+performance\b",
+            r"\bvaga\s+performance\b",
+            r"\bperformance\b",
+            r"\bgrowth\b",
+            r"\bgoogle\s+ads\b",
+            r"\bmeta\s+ads\b",
+            r"\btiktok\s+ads\b",
+            r"\banalytics\b",
+        ],
+    ),
+    (
+        "PLANEJAMENTO ESTRATÉGICO",
+        [
+            r"\bvaga\s+planejamento\b",
+            r"\bvaga\s+planejamento\s+estrat[eé]gico\b",
+            r"\bplanejamento\s+estrat[eé]gico\b",
+            r"\bestrategista\b",
+            r"\bplanejamento\b",
+        ],
+    ),
+    (
+        "MOTION DESIGNER",
+        [
+            r"\bvaga\s+designer\s+motion\b",
+            r"\bvaga\s+motion\b",
+            r"\bmotion\b",
+            r"\bmotion\s+designer\b",
+            r"\banima[cç][aã]o\b",
+        ],
+    ),
+    (
+        "REDATOR",
+        [
+            r"\bvaga\s+redator(?:a)?\b",
+            r"\bredator(?:a)?\b",
+            r"\bcopywriter\b",
+            r"\breda[cç][aã]o\b",
+        ],
+    ),
+    (
+        "EXECUTIVO DE CONTAS",
+        [
+            r"\bvaga\s+executivo(?:a)?\s+de\s+contas\b",
+            r"\bexecutivo(?:a)?\s+de\s+contas\b",
+            r"\bexecutivo(?:a)?\s+comercial\b",
+            r"\baccount\s+executive\b",
+        ],
+    ),
 ]
 
 
@@ -740,6 +899,61 @@ def detect_explicit_role_from_text(text: str) -> str:
         for pattern in patterns:
             if re.search(pattern, n, flags=re.IGNORECASE):
                 return sheet_name
+
+    return ""
+
+
+def extract_level_from_text(text: str) -> str:
+    n = normalize_text(text)
+
+    if re.search(r"\b(senior|s[eê]nior|sr\.?|especialista)\b", n):
+        return "Sênior"
+
+    if re.search(r"\b(pleno|pl\.?)\b", n):
+        return "Pleno"
+
+    if re.search(
+        r"\b(junior|j[uú]nior|jr\.?|est[aá]gio|estagi[aá]rio|assistente|auxiliar)\b", n
+    ):
+        return "Júnior"
+
+    return ""
+
+
+def infer_candidate_level(
+    subject: str = "", body: str = "", curriculum_text: str = ""
+) -> str:
+    # prioridade 1: título do email
+    level = extract_level_from_text(subject)
+    if level:
+        return level
+
+    # prioridade 2: corpo do email
+    level = extract_level_from_text(body)
+    if level:
+        return level
+
+    # prioridade 3: currículo
+    level = extract_level_from_text(curriculum_text)
+    if level:
+        return level
+
+    text = normalize_text(curriculum_text)
+
+    years = []
+    for m in re.finditer(r"(\d{1,2})\s*(?:anos|ano)\s+de\s+experi[eê]ncia", text):
+        try:
+            years.append(int(m.group(1)))
+        except Exception:
+            pass
+
+    if years:
+        max_years = max(years)
+        if max_years >= 5:
+            return "Sênior"
+        if max_years >= 2:
+            return "Pleno"
+        return "Júnior"
 
     return ""
 
@@ -806,6 +1020,7 @@ def extract_explicit_role_from_email(subject: str, body: str) -> str:
 # AI EXTRACTION
 # =========================
 
+
 def extract_json_block(text: str) -> str:
     if not text:
         return ""
@@ -816,7 +1031,7 @@ def extract_json_block(text: str) -> str:
     end = text.rfind("}")
 
     if start >= 0 and end > start:
-        return text[start: end + 1].strip()
+        return text[start : end + 1].strip()
 
     return text
 
@@ -962,6 +1177,7 @@ def enrich_extracted_with_fallbacks(
 # EXCEL / MATCHING
 # =========================
 
+
 def append_candidate_to_sheet(
     file_path: Path,
     sender: str,
@@ -1004,7 +1220,11 @@ def append_candidate_to_sheet(
             f"Vaga: {cargo_canonico} | Nota: {nota}"
         )
 
-        if REPROCESS_ALL_EMAILS and MOVE_REJECTED_UNDER_MIN_SCORE and file_path.exists():
+        if (
+            REPROCESS_ALL_EMAILS
+            and MOVE_REJECTED_UNDER_MIN_SCORE
+            and file_path.exists()
+        ):
             moved_to = move_rejected_file(file_path)
             print("[EMAIL] Currículo movido para rejeitados:", moved_to)
 
@@ -1128,25 +1348,45 @@ def email_has_cv_attachment(msg) -> bool:
     return False
 
 
-def should_process_email(msg, subject: str, sender: str, body: str) -> tuple[bool, str]:
-    if not email_has_cv_attachment(msg):
-        return False, ""
+def body_has_candidate_info(body: str) -> bool:
+    text = normalize_text(body)
 
+    candidate_signals = [
+        "nome",
+        "telefone",
+        "email",
+        "e-mail",
+        "experiencia",
+        "experiência",
+        "formacao",
+        "formação",
+        "portfolio",
+        "portfólio",
+        "linkedin",
+    ]
+
+    return sum(1 for s in candidate_signals if s in text) >= 2
+
+
+def should_process_email(msg, subject: str, sender: str, body: str) -> tuple[bool, str]:
     explicit_sheet = extract_explicit_role_from_email(subject, body)
 
     if not explicit_sheet:
         return False, ""
 
-    linkedin_flow = is_linkedin_sender(sender) and has_application_signal(subject, body)
-    direct_flow = has_direct_application_signal(subject, body)
-    role_flow = bool(explicit_sheet)
+    has_cv = email_has_cv_attachment(msg)
+    has_body_candidate = body_has_candidate_info(body)
 
-    return bool(linkedin_flow or direct_flow or role_flow), explicit_sheet
+    if has_cv or has_body_candidate:
+        return True, explicit_sheet
+
+    return False, explicit_sheet
 
 
 # =========================
 # PROCESS INBOX
 # =========================
+
 
 def process_inbox():
     mail = connect_mailbox()
@@ -1194,23 +1434,29 @@ def process_inbox():
         print("[EMAIL] Assunto:", subject)
         print("[EMAIL] De:", sender)
 
-        should_process, explicit_sheet = should_process_email(msg, subject, sender, body)
+        should_process, explicit_sheet = should_process_email(
+            msg, subject, sender, body
+        )
 
         if not should_process:
             if email_has_cv_attachment(msg) and not explicit_sheet:
-                print("[EMAIL] Ignorado: tem currículo, mas não há vaga explícita confiável no assunto/corpo.")
+                print(
+                    "[EMAIL] Ignorado: tem currículo, mas não há vaga explícita confiável no assunto/corpo."
+                )
                 no_explicit_role += 1
             else:
                 print("[EMAIL] Ignorado por não atender critérios de currículo")
             ignored += 1
             continue
 
-        level = extract_level(body)
+        level = infer_candidate_level(subject=subject, body=body, curriculum_text="")
         portfolio = extract_portfolio(body)
         cargo_canonico = sheet_display_title(explicit_sheet)
 
         print("[EMAIL] Nível detectado:", level if level else "não informado")
-        print("[EMAIL] Portfólio detectado:", portfolio if portfolio else "não informado")
+        print(
+            "[EMAIL] Portfólio detectado:", portfolio if portfolio else "não informado"
+        )
         print("[EMAIL] Vaga explícita detectada:", cargo_canonico)
         print("[EMAIL] Aba destino:", explicit_sheet)
 
@@ -1227,6 +1473,15 @@ def process_inbox():
         for file_path in saved:
             curriculum_text = extract_text_from_file(file_path)
 
+            level_from_curriculum = infer_candidate_level(
+                subject=subject,
+                body=body,
+                curriculum_text=curriculum_text,
+            )
+
+            if level_from_curriculum:
+                level = level_from_curriculum
+
             extracted = extract_candidate_data_with_ai(file_path)
             extracted = enrich_extracted_with_fallbacks(
                 extracted=extracted,
@@ -1240,7 +1495,10 @@ def process_inbox():
             print("         Nome:", extracted.get("nome_completo") or "(vazio)")
             print("         Idade:", extracted.get("idade") or "(vazio)")
             print("         Localização:", extracted.get("localizacao") or "(vazio)")
-            print("         Cargo pretendido:", extracted.get("cargo_pretendido") or "(vazio)")
+            print(
+                "         Cargo pretendido:",
+                extracted.get("cargo_pretendido") or "(vazio)",
+            )
             print("         Habilidades:", extracted.get("habilidades") or "(vazio)")
             print("         Formação:", extracted.get("formacoes") or "(vazio)")
             print("         Email:", extracted.get("email") or "(vazio)")
