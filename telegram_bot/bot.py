@@ -373,42 +373,44 @@ def parse_top_query(text: str) -> tuple[int, str] | None:
     return max(1, min(limit, 20)), query
 
 
+def resolve_top_query_to_sheet(query: str) -> str:
+    q = (query or "").strip().lower()
+
+    if "comunicação" in q or "comunicacao" in q:
+        return "COORDENADOR DE COMUNICAÇÃO"
+
+    return normalize_role_to_sheet_name(query)
+
+
+
 def get_top_candidates(query: str, limit: int = 5) -> str:
     rows = _load_banco_talentos_rows(limit=30000)
 
     if not rows:
         return "📂 O banco de talentos está vazio."
 
-    sheet = normalize_role_to_sheet_name(query)
-    query_norm = query.lower().strip()
+    target_sheet = resolve_top_query_to_sheet(query)
 
-    filtered = []
-
-    for r in rows:
-        cargo = safe_str(r.get("Cargo pretendido")).lower()
-        aba = safe_str(r.get("_sheet"))
-        titulo = safe_str(r.get("Título normalizado")).lower()
-        habilidades = safe_str(r.get("Habilidades")).lower()
-
-        if aba == sheet:
-            filtered.append(r)
-            continue
-
-        if query_norm and (
-            query_norm in cargo
-            or query_norm in titulo
-            or query_norm in habilidades
-            or query_norm in aba.lower()
-        ):
-            filtered.append(r)
+    # 🔥 busca EXCLUSIVAMENTE pela aba correta
+    filtered = [
+        r for r in rows
+        if safe_str(r.get("_sheet")) == target_sheet
+    ]
 
     if not filtered:
-        return f"Não encontrei candidatos para: {query}"
+        return (
+            f"Não encontrei candidatos para "
+            f"{sheet_display_title(target_sheet)}."
+        )
 
-    filtered.sort(key=lambda r: parse_score(r.get("Nota")), reverse=True)
+    filtered.sort(
+        key=lambda r: parse_score(r.get("Nota")),
+        reverse=True,
+    )
 
     lines = [
-        f"🏆 Top {min(limit, len(filtered))} candidato(s) para {sheet_display_title(sheet)}:\n"
+        f"🏆 Top {min(limit, len(filtered))} candidato(s) para "
+        f"{sheet_display_title(target_sheet)}:\n"
     ]
 
     for idx, r in enumerate(filtered[:limit], start=1):
@@ -421,12 +423,18 @@ def get_top_candidates(query: str, limit: int = 5) -> str:
         portfolio = safe_str(r.get("Portfólio"))
 
         lines.append(f"{idx}. {nome}")
-        lines.append(f"   Nota: {nota} | Nível: {nivel} | Local: {loc}")
+        lines.append(
+            f"   Nota: {nota} | "
+            f"Nível: {nivel} | "
+            f"Local: {loc}"
+        )
 
         if email:
             lines.append(f"   Email: {email}")
+
         if tel:
             lines.append(f"   Telefone: {tel}")
+
         if portfolio:
             lines.append(f"   Portfólio/CV: {portfolio}")
 
