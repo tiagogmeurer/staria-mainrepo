@@ -990,6 +990,134 @@
       "version": 1,
       "status": "active",
       "updated_at": "2026-04-15"
-    }
+    },
+    {
+  "role_id": "coordenador_comunicacao_jacarepagua",
+  "title": "Coordenador(a) de Comunicação",
+  "family": "comunicacao",
+  "hub": "starmkt_jacarepagua",
+  "seniority": "coordenacao",
+  "work_model": "presencial",
+  "location": "Jacarepaguá - Rio de Janeiro/RJ",
+  "summary": "Coordenador de Comunicação responsável por liderar equipe in house, atuar como ponto focal estratégico do marketing do cliente e garantir planejamento, execução, qualidade, prazos e performance das campanhas promocionais.",
+  "responsibilities": [
+    "Coordenar equipe de Comunicação in house com 6 profissionais",
+    "Garantir performance, qualidade e cumprimento de prazos",
+    "Atuar como ponto focal estratégico do Marketing do cliente",
+    "Desenvolver planejamentos estratégicos de campanhas promocionais",
+    "Estruturar e validar briefings junto ao cliente",
+    "Planejar calendário promocional, ações sazonais e eventos regionais",
+    "Propor oportunidades de mídia regional em parceria com mídia",
+    "Validar materiais de comunicação antes da produção",
+    "Monitorar KPIs de campanhas e propor otimizações contínuas",
+    "Realizar visitas a lojas e pesquisas de campo",
+    "Analisar comunicação da concorrência",
+    "Elaborar relatórios executivos de performance e resultados"
+  ],
+  "required_skills": [
+    "coordenação de comunicação",
+    "liderança de equipe",
+    "gestão de equipe in house",
+    "planejamento estratégico",
+    "campanhas promocionais",
+    "gestão de briefing",
+    "relacionamento com cliente",
+    "calendário promocional",
+    "ações sazonais",
+    "eventos regionais",
+    "mídia regional",
+    "validação de materiais",
+    "kpis",
+    "relatórios executivos",
+    "pesquisa de campo",
+    "análise de concorrência"
+  ],
+  "preferred_skills": [
+    "residir em Jacarepaguá",
+    "residir próximo a Jacarepaguá",
+    "experiência com varejo",
+    "experiência com campanhas promocionais",
+    "experiência com liderança de times criativos ou comunicação"
+  ],
+  "tools": [
+    "ferramentas de gestão de projetos",
+    "ferramentas de apresentação",
+    "dashboards",
+    "relatórios executivos"
+  ],
+  "experience_requirements": [
+    "experiência em coordenação de comunicação ou marketing",
+    "experiência liderando equipe",
+    "experiência com cliente e briefing",
+    "experiência com campanhas promocionais e calendário de ações"
+  ],
+  "education_requirements": [],
+  "keywords": [
+    "coordenador de comunicação",
+    "coordenadora de comunicação",
+    "comunicação",
+    "marketing",
+    "jacarepaguá",
+    "rio de janeiro",
+    "briefing",
+    "campanhas promocionais",
+    "mídia regional",
+    "kpis",
+    "relatórios executivos"
+  ],
+  "aliases": [
+    "coordenador de comunicacao",
+    "coordenadora de comunicacao",
+    "coordenação de comunicação",
+    "coordenador de marketing",
+    "coordenadora de marketing",
+    "líder de comunicação"
+  ],
+  "persona": {
+    "archetype": "líder de comunicação in house orientado a cliente e performance",
+    "summary": "Perfil que combina liderança de equipe, relacionamento com cliente, planejamento promocional e capacidade de transformar briefing em execução organizada e mensurável.",
+    "work_style": [
+      "liderança construtiva",
+      "organização de equipe",
+      "interface constante com cliente",
+      "gestão de prazos",
+      "visão estratégica com execução prática"
+    ],
+    "behavioral_traits": [
+      "foco no cliente",
+      "resiliência",
+      "proatividade",
+      "foco em solução",
+      "boa comunicação",
+      "capacidade de relacionamento"
+    ],
+    "decision_style": [
+      "prioriza clareza de briefing e eficiência de execução",
+      "busca soluções práticas e oportunidades além do pedido inicial"
+    ],
+    "ideal_signals": [
+      "mora em Jacarepaguá ou região próxima",
+      "já coordenou equipe de comunicação ou marketing",
+      "tem experiência com planejamento promocional",
+      "sabe lidar com cliente e validar entregas",
+      "usa KPIs e relatórios para otimização"
+    ],
+    "risk_signals": [
+      "perfil apenas operacional sem liderança",
+      "baixa resiliência com cliente",
+      "dificuldade de organizar prazos",
+      "pouca experiência com briefing e planejamento",
+      "residência muito distante do hub"
+    ]
+  },
+  "source_docs": [
+    "Briefing Coordenador de Comunicação Jacarepaguá"
+  ],
+  "version": 1,
+  "status": "active",
+  "updated_at": "2026-05-26"
+}
+
+
   ]
 }

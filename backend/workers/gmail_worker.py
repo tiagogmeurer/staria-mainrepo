@@ -886,6 +886,15 @@ ROLE_PATTERNS = [
             r"\baccount\s+executive\b",
         ],
     ),
+    (
+        "COORDENADOR DE COMUNICAÇÃO",
+        [
+            r"\bvaga\s+coordenador(?:a)?\s+de\s+comunica[cç][aã]o\b",
+            r"\bcoordenador(?:a)?\s+de\s+comunica[cç][aã]o\b",
+            r"\bcoordena[cç][aã]o\s+de\s+comunica[cç][aã]o\b",
+            r"\bl[ií]der\s+de\s+comunica[cç][aã]o\b",
+        ],
+    ),
 ]
 
 

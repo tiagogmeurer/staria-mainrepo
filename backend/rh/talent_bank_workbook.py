@@ -12,7 +12,6 @@ from openpyxl import Workbook, load_workbook
 
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
-
 DEFAULT_DRIVE_ROOT = Path(
     os.getenv("STARIA_DRIVE_ROOT", r"G:\Drives compartilhados\STARMKT\StarIA")
 )
@@ -44,6 +43,7 @@ CANONICAL_SHEETS = [
     "PLANEJAMENTO ESTRATÉGICO",
     "MOTION DESIGNER",
     "REDATOR",
+    "COORDENADOR DE COMUNICAÇÃO",
 ]
 
 VISIBLE_HEADERS = [
@@ -87,6 +87,7 @@ SHEET_DISPLAY_TITLES = {
     "PLANEJAMENTO ESTRATÉGICO": "Planejamento Estratégico",
     "MOTION DESIGNER": "Motion Designer",
     "REDATOR": "Redator",
+    "COORDENADOR DE COMUNICAÇÃO": "Coordenador de Comunicação",
 }
 
 FALLBACK_REFINED_HEADERS = [
@@ -140,6 +141,7 @@ def safe_str(value: Any) -> str:
         return ""
     return re.sub(r"\s+", " ", str(value)).strip()
 
+
 def clean_excel_value(value: Any) -> Any:
     if value is None:
         return ""
@@ -153,7 +155,7 @@ def clean_excel_value(value: Any) -> Any:
 
         return value
 
-    return value    
+    return value
 
 
 def norm(value: Any) -> str:
@@ -230,13 +232,17 @@ def normalize_role_to_sheet_name(role: str) -> str:
     ):
         return "DIAGRAMADOR"
 
-    if "diretor" in r and "arte" in r and (
-        "branding" in r or "identidade" in r or "produto" in r
+    if (
+        "diretor" in r
+        and "arte" in r
+        and ("branding" in r or "identidade" in r or "produto" in r)
     ):
         return "DIRETOR DE ARTE BRANDING"
 
-    if "diretor" in r and "arte" in r and (
-        "digital" in r or "performance" in r or "marketplace" in r
+    if (
+        "diretor" in r
+        and "arte" in r
+        and ("digital" in r or "performance" in r or "marketplace" in r)
     ):
         return "DIRETOR DE ARTE DIGITAL"
 
@@ -254,6 +260,12 @@ def normalize_role_to_sheet_name(role: str) -> str:
 
     if "redator" in r or "copywriter" in r or "copy" == r:
         return "REDATOR"
+
+    if "coordenador" in r and "comunicação" in r:
+        return "COORDENADOR DE COMUNICAÇÃO"
+
+    if "coordenadora" in r and "comunicação" in r:
+        return "COORDENADOR DE COMUNICAÇÃO"
 
     if "conteudo" in r or "conteúdo" in r or "social media" in r:
         return "COORDENADOR DE CONTEÚDO"
@@ -421,7 +433,9 @@ def duplicate_key_from_row(row: dict[str, Any]) -> str:
     phone = normalize_phone(row.get("Telefone"))
     name = normalize_duplicate_key(row.get("Nome completo"))
     role = normalize_duplicate_key(row.get("Cargo pretendido"))
-    resume = normalize_duplicate_key(row.get("Nome do arquivo") or row.get("Caminho do currículo"))
+    resume = normalize_duplicate_key(
+        row.get("Nome do arquivo") or row.get("Caminho do currículo")
+    )
 
     if email and role:
         return f"email:{email}|role:{role}"
@@ -479,7 +493,9 @@ def merge_duplicate_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [seen[k] for k in ordered_keys]
 
 
-def copy_template_dimensions(target_ws, target_headers: list[str], template_ws=None) -> None:
+def copy_template_dimensions(
+    target_ws, target_headers: list[str], template_ws=None
+) -> None:
     if template_ws is None:
         for idx, header in enumerate(target_headers, start=1):
             letter = target_ws.cell(row=1, column=idx).column_letter
@@ -532,7 +548,9 @@ def apply_header_styles(target_ws, target_headers: list[str], template_ws=None) 
         copy_cell_style(src, dst)
 
 
-def apply_body_row_style(target_ws, row_idx: int, target_headers: list[str], template_ws=None) -> None:
+def apply_body_row_style(
+    target_ws, row_idx: int, target_headers: list[str], template_ws=None
+) -> None:
     if template_ws is None:
         return
 
@@ -550,7 +568,9 @@ def apply_body_row_style(target_ws, row_idx: int, target_headers: list[str], tem
                 column=first_non_empty_header_cell(template_ws).column,
             )
         elif header in template_headers:
-            src = template_ws.cell(row=template_row, column=template_headers.index(header) + 1)
+            src = template_ws.cell(
+                row=template_row, column=template_headers.index(header) + 1
+            )
         else:
             src = template_ws.cell(
                 row=template_row,
@@ -560,7 +580,9 @@ def apply_body_row_style(target_ws, row_idx: int, target_headers: list[str], tem
         copy_cell_style(src, dst)
 
 
-def clear_and_write_sheet(ws, headers: list[str], rows: list[dict[str, Any]], template_ws=None) -> None:
+def clear_and_write_sheet(
+    ws, headers: list[str], rows: list[dict[str, Any]], template_ws=None
+) -> None:
     if ws.max_row:
         ws.delete_rows(1, ws.max_row)
 
@@ -611,17 +633,91 @@ def ensure_ids(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def canonical_sheet_rules() -> dict[str, list[str]]:
     return {
-        "EXECUTIVO DE CONTAS": ["executivo de contas", "account executive", "executivo comercial"],
-        "ATENDIMENTO": ["atendimento", "account manager", "relacionamento", "cliente interno"],
-        "COORDENADOR DE CONTEÚDO": ["coordenador de conteudo", "coordenador de conteúdo", "conteudo", "conteúdo", "social media", "editorial"],
-        "DIRETOR DE ARTE BRANDING": ["diretor de arte branding", "branding", "identidade visual", "brand", "marca"],
-        "DIRETOR DE ARTE DIGITAL": ["diretor de arte digital", "da digital", "performance digital", "marketplace", "ecommerce", "e-commerce"],
-        "DIRETOR DE ARTE INSTITUCIONAL": ["diretor de arte institucional", "campanhas institucionais", "institucional", "diretor de arte", "designer grafico senior", "designer gráfico sênior"],
-        "DIAGRAMADOR": ["diagramador", "diagramadora", "diagramação", "diagramacao", "tabloide", "tablóide", "ofertas", "encarte"],
-        "PLAN. PERFORMANCE & GROWTH": ["performance", "growth", "grow", "google ads", "meta ads", "analytics", "tiktok ads"],
-        "PLANEJAMENTO ESTRATÉGICO": ["estrategista", "planejamento estrategico", "planejamento estratégico", "brand strategy"],
-        "MOTION DESIGNER": ["motion", "motion designer", "after effects", "premiere", "animação", "animacao"],
+        "EXECUTIVO DE CONTAS": [
+            "executivo de contas",
+            "account executive",
+            "executivo comercial",
+        ],
+        "ATENDIMENTO": [
+            "atendimento",
+            "account manager",
+            "relacionamento",
+            "cliente interno",
+        ],
+        "COORDENADOR DE CONTEÚDO": [
+            "coordenador de conteudo",
+            "coordenador de conteúdo",
+            "conteudo",
+            "conteúdo",
+            "social media",
+            "editorial",
+        ],
+        "DIRETOR DE ARTE BRANDING": [
+            "diretor de arte branding",
+            "branding",
+            "identidade visual",
+            "brand",
+            "marca",
+        ],
+        "DIRETOR DE ARTE DIGITAL": [
+            "diretor de arte digital",
+            "da digital",
+            "performance digital",
+            "marketplace",
+            "ecommerce",
+            "e-commerce",
+        ],
+        "DIRETOR DE ARTE INSTITUCIONAL": [
+            "diretor de arte institucional",
+            "campanhas institucionais",
+            "institucional",
+            "diretor de arte",
+            "designer grafico senior",
+            "designer gráfico sênior",
+        ],
+        "DIAGRAMADOR": [
+            "diagramador",
+            "diagramadora",
+            "diagramação",
+            "diagramacao",
+            "tabloide",
+            "tablóide",
+            "ofertas",
+            "encarte",
+        ],
+        "PLAN. PERFORMANCE & GROWTH": [
+            "performance",
+            "growth",
+            "grow",
+            "google ads",
+            "meta ads",
+            "analytics",
+            "tiktok ads",
+        ],
+        "PLANEJAMENTO ESTRATÉGICO": [
+            "estrategista",
+            "planejamento estrategico",
+            "planejamento estratégico",
+            "brand strategy",
+        ],
+        "MOTION DESIGNER": [
+            "motion",
+            "motion designer",
+            "after effects",
+            "premiere",
+            "animação",
+            "animacao",
+        ],
         "REDATOR": ["redator", "redatora", "copywriter", "copy", "redação", "redacao"],
+        "COORDENADOR DE COMUNICAÇÃO": [
+            "coordenador de comunicacao",
+            "coordenadora de comunicacao",
+            "coordenação de comunicação",
+            "comunicacao in house",
+            "briefing",
+            "campanhas promocionais",
+            "jacarepagua",
+        ],
     }
 
 
@@ -640,6 +736,7 @@ def choose_sheet_name(sheet_names: list[str], row: dict[str, Any]) -> str:
         "estrategista_senior_planejamento": "PLANEJAMENTO ESTRATÉGICO",
         "motion_designer": "MOTION DESIGNER",
         "redator_digital": "REDATOR",
+        "coordenador_comunicacao_jacarepagua": "COORDENADOR DE COMUNICAÇÃO"
     }
 
     role_id = safe_str(row.get("Role ID sugerido"))
@@ -790,7 +887,9 @@ def normalize_phone(value: Any) -> str:
     return re.sub(r"\D+", "", safe_str(value))
 
 
-def is_duplicate_candidate(existing_rows: list[dict[str, Any]], values: dict[str, Any]) -> bool:
+def is_duplicate_candidate(
+    existing_rows: list[dict[str, Any]], values: dict[str, Any]
+) -> bool:
     new_values = normalize_row_data(values)
 
     new_email = normalize_duplicate_key(new_values.get("Email"))
@@ -850,7 +949,11 @@ def append_candidate_record(
 
     values = normalize_row_data(dict(values))
 
-    sheet_name = normalize_sheet_name(target_sheet) if target_sheet else choose_sheet_name(wb.sheetnames, values)
+    sheet_name = (
+        normalize_sheet_name(target_sheet)
+        if target_sheet
+        else choose_sheet_name(wb.sheetnames, values)
+    )
 
     if sheet_name not in wb.sheetnames:
         sheet_name = choose_sheet_name(wb.sheetnames, values)
@@ -860,11 +963,15 @@ def append_candidate_record(
     if is_duplicate_candidate(all_existing_rows, values):
         print(
             "[TALENT BANK] Candidato duplicado detectado. Registro ignorado:",
-            values.get("Nome completo") or values.get("Email") or values.get("Nome do arquivo"),
+            values.get("Nome completo")
+            or values.get("Email")
+            or values.get("Nome do arquivo"),
         )
         return "DUPLICADO"
 
-    candidate_id = safe_str(values.get("ID")) or get_next_candidate_id_from_rows(all_existing_rows)
+    candidate_id = safe_str(values.get("ID")) or get_next_candidate_id_from_rows(
+        all_existing_rows
+    )
 
     values["ID"] = candidate_id
 
