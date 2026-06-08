@@ -116,6 +116,143 @@ MOVE_REJECTED_UNDER_MIN_SCORE = os.getenv(
 ).lower() in {"1", "true", "yes", "sim"}
 
 
+INVALID_NAME_TERMS = {
+    "perfil profissional",
+    "resumo profissional",
+    "habilidades comportamentais",
+    "habilidades",
+    "competências",
+    "competencias",
+    "formação",
+    "formacao",
+    "experiência",
+    "experiencia",
+    "objetivo",
+    "currículo",
+    "curriculo",
+    "dados pessoais",
+    "contato",
+    "telefone",
+    "email",
+    "e-mail",
+    "linkedin",
+    "portfolio",
+    "portfólio",
+}
+
+
+def is_valid_person_name(value: str) -> bool:
+    name = normalize_spaces(value or "")
+    n = normalize_text(name)
+
+    if not name:
+        return False
+
+    if n in INVALID_NAME_TERMS:
+        return False
+
+    if any(term in n for term in INVALID_NAME_TERMS):
+        return False
+
+    if re.search(r"\d", name):
+        return False
+
+    if "@" in name or "http" in n or "www." in n:
+        return False
+
+    words = name.split()
+
+    if len(words) < 2:
+        return False
+
+    if len(words) > 6:
+        return False
+
+    if len(name) < 5 or len(name) > 80:
+        return False
+
+    valid_words = 0
+    for w in words:
+        clean = re.sub(r"[^A-Za-zÀ-ÿ'-]", "", w)
+        if len(clean) >= 2:
+            valid_words += 1
+
+    if valid_words < 2:
+        return False
+
+    return True
+
+
+def extract_candidate_name_from_subject(subject: str) -> str:
+    subject = decode_mime_words(subject or "")
+
+    patterns = [
+        r"\bfrom\s+(.+)$",
+        r"\bde\s+(.+)$",
+    ]
+
+    for pattern in patterns:
+        m = re.search(pattern, subject, flags=re.IGNORECASE)
+        if not m:
+            continue
+
+        candidate = normalize_spaces(m.group(1))
+        candidate = re.sub(r"\s*[-–—|].*$", "", candidate).strip()
+
+        if is_valid_person_name(candidate):
+            return candidate
+
+    return ""
+
+
+def extract_candidate_name_from_filename(file_path: Path) -> str:
+    stem = file_path.stem
+
+    text = re.sub(r"^\d{8}_\d{6}_", "", stem)
+    text = re.sub(r"\.(pdf|docx?|rtf|txt)$", "", text, flags=re.I)
+    text = re.sub(
+        r"\b(curriculo|currículo|cv|resume|portfolio|portfólio)\b",
+        " ",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(
+        r"\b(vaga|diretor|arte|senior|sênior|pleno|junior|júnior|atendimento|diagramador|redator|coordenador|comunicacao|comunicação|planejamento|performance|growth|branding|digital|institucional)\b",
+        " ",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(r"[_\-().]+", " ", text)
+    text = normalize_spaces(text)
+
+    # tenta pegar uma sequência plausível de 2 a 5 palavras
+    words = text.split()
+    for size in range(min(5, len(words)), 1, -1):
+        for i in range(0, len(words) - size + 1):
+            candidate = " ".join(words[i : i + size])
+            if is_valid_person_name(candidate):
+                return candidate
+
+    return ""
+
+
+def extract_candidate_name_from_curriculum_lines(curriculum_text: str) -> str:
+    lines = [
+        normalize_spaces(line)
+        for line in (curriculum_text or "").splitlines()
+        if normalize_spaces(line)
+    ]
+
+    for line in lines[:20]:
+        line = re.sub(r"^[•\-\–\—\*\|]+", "", line).strip()
+        line = re.sub(r"\s*[:|].*$", "", line).strip()
+
+        if is_valid_person_name(line):
+            return line
+
+    return ""
+
+
 # =========================
 # UTILS
 # =========================
@@ -1174,18 +1311,20 @@ def enrich_extracted_with_fallbacks(
     if not extracted.get("portfolio"):
         extracted["portfolio"] = extract_portfolio_regex(curriculum_text)
 
-    if not extracted.get("nome_completo"):
-        lines = curriculum_text.splitlines()
-        for line in lines[:12]:
-            line = normalize_spaces(line)
-            if not line:
-                continue
-            normalized_line = normalize_text(line)
-            if "curriculum" in normalized_line or "curriculo" in normalized_line:
-                continue
-            if len(line.split()) >= 2 and len(line) <= 80:
-                extracted["nome_completo"] = line
-                break
+    current_name = extracted.get("nome_completo", "")
+
+    if not is_valid_person_name(current_name):
+        extracted["nome_completo"] = ""
+
+    name_from_file = extract_candidate_name_from_filename(file_path)
+    if name_from_file:
+        extracted["nome_completo"] = name_from_file
+    else:
+        name_from_curriculum = extract_candidate_name_from_curriculum_lines(
+            curriculum_text
+        )
+        if name_from_curriculum:
+            extracted["nome_completo"] = name_from_curriculum
 
     return extracted
 
@@ -1500,11 +1639,24 @@ def process_inbox():
                 level = level_from_curriculum
 
             extracted = extract_candidate_data_with_ai(file_path)
+
             extracted = enrich_extracted_with_fallbacks(
                 extracted=extracted,
                 file_path=file_path,
                 curriculum_text=curriculum_text,
             )
+
+            name_from_subject = extract_candidate_name_from_subject(subject)
+
+            if name_from_subject:
+                extracted["nome_completo"] = name_from_subject
+            elif not is_valid_person_name(extracted.get("nome_completo", "")):
+                print(
+                    f"[EMAIL] Nome inválido ou não identificado para {file_path.name}. "
+                    f"Linha NÃO será gravada."
+                ) 
+                
+                continue
 
             extracted["cargo_pretendido"] = cargo_canonico
 
